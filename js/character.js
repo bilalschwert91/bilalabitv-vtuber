@@ -30,6 +30,8 @@ const FILES = {
 };
 
 const MOOD_IMG = { happy: 'home_happy', sad: 'home_sad', angry: 'home_angry', question: 'home_question' };
+// Optional: open-mouth versions per mood. If the file exists it is used, otherwise the neutral open mouth.
+const MOOD_OPEN = { happy: 'img/home_happy_open.jpg', sad: 'img/home_sad_open.jpg', angry: 'img/home_angry_open.jpg', question: 'img/home_question_open.jpg' };
 
 // Geometry measured from the artwork
 // Inner edge of the V collar (measured), top to the V point, right side; left is mirrored
@@ -38,17 +40,14 @@ const COLLAR_L = COLLAR_R.slice(0, -1).reverse().map(([x, y]) => [768 - x, y]);
 
 // Neck + chest skin inside the collar: moves with the head, the shirt is drawn over it
 const NECK_POLY = [[222, 700], [547, 700], [540, 730], [530, 760], [530, 848], ...COLLAR_R, ...COLLAR_L, [238, 848], [238, 760], [229, 730]];
-// Static skin fill behind the moving neck, inset so it never shows outside the head at rest
-const NECK_FILL = [[246, 745], [522, 745], [522, 852], ...COLLAR_R.map(([x, y]) => [x - 6, y + 2]), ...COLLAR_L.map(([x, y]) => [x + 6, y + 2]), [246, 852]];
 
 const G = {
   pivot: { x: 384, y: 985 },          // base of the neck (V point), rotation pivot
   headDy: 22,                         // push the whole head+neck unit down (shorter visible neck)
   headTop: [[0, 0], [768, 0], [768, 700], [0, 700]],
   neck: NECK_POLY,
-  neckFill: NECK_FILL,
   bodyTop: 700,
-  mouth: { x: 384, y: 690, rx: 96, ry: 64 },
+  mouth: { x: 384, y: 690, rx: 74, ry: 46 },
   eyeL: { x: 298, y: 515, rx: 74, ry: 46 },
   eyeR: { x: 468, y: 515, rx: 74, ry: 46 },
   earL: { x: 172, y: 520 }, earR: { x: 598, y: 520 },
@@ -99,7 +98,7 @@ function makePatch(img, e) {
   ctx.save();
   ctx.translate(e.x, e.y);
   ctx.scale(1, e.ry / e.rx);
-  const grad = ctx.createRadialGradient(0, 0, e.rx * 0.45, 0, 0, e.rx);
+  const grad = ctx.createRadialGradient(0, 0, e.rx * 0.5, 0, 0, e.rx);
   grad.addColorStop(0, 'rgba(0,0,0,1)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = grad;
@@ -115,7 +114,6 @@ export class Character {
     this.glasses = false;
     this.ready = false;
     this.img = {};
-    this.neckColor = {};
     this.moodW = { neutral: 1, happy: 0, sad: 0, angry: 0, question: 0 };
     this.canvas = document.createElement('canvas');
     this.canvas.width = Math.round(IMG_W * SCALE);
@@ -135,13 +133,14 @@ export class Character {
       n++;
       if (onProgress) onProgress(n, names.length);
     }));
-    // neck colour per kit, sampled from the artwork
-    for (const k of ['home', 'away', 'third']) {
-      const px = this.img[k + '_neutral'].getContext('2d').getImageData(384, 930, 1, 1).data;
-      this.neckColor[k] = `rgb(${px[0]},${px[1]},${px[2]})`;
-    }
     // soft-edged patches so blended regions never show a hard seam
-    this.mouthPatch = makePatch(this.img.home_mouth_open, G.mouth);
+    this.mouthPatch = { neutral: makePatch(this.img.home_mouth_open, G.mouth) };
+    await Promise.all(Object.keys(MOOD_OPEN).map(async (m) => {
+      try {
+        const im = await loadImage(MOOD_OPEN[m]);
+        this.mouthPatch[m] = makePatch(keyGreen(im), G.mouth);
+      } catch (e) { /* optional */ }
+    }));
     this.eyePatchL = makePatch(this.img.home_eyes_closed, G.eyeL);
     this.eyePatchR = makePatch(this.img.home_eyes_closed, G.eyeR);
     this.ready = true;
@@ -178,26 +177,20 @@ export class Character {
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
     ctx.clearRect(0, 0, IMG_W, IMG_H);
 
-    // body transform: light sway + breathing (shared by the static skin fill and the shirt)
+    // head motion; the shirt follows it partially so the collar opening never gaps much
+    const dx = yaw * 9 + p.posX * 0.4;
+    const dy = pitch * 7 + p.posY * 0.3 + Math.sin(p.time * 0.0022) * 1.5;
     const bodyTransform = () => {
       ctx.translate(IMG_W / 2, IMG_H);
       ctx.scale(1, breathe);
-      ctx.rotate(roll * 0.12 * Math.PI / 180);
-      ctx.translate(-IMG_W / 2 + yaw * 6, -IMG_H);
+      ctx.rotate(roll * 0.4 * Math.PI / 180);
+      ctx.translate(-IMG_W / 2 + dx * 0.55, -IMG_H + dy * 0.4);
     };
 
-    // 1. static skin fill inside the collar, so head motion never reveals green
+    // 1. head + neck unit
     ctx.save();
-    bodyTransform();
-    ctx.fillStyle = this.neckColor[this.kit] || '#c9956a';
-    this.poly(ctx, G.neckFill);
-    ctx.fill();
-    ctx.restore();
-
-    // 2. head + neck unit
-    ctx.save();
-    const hx = G.pivot.x + yaw * 10 + p.posX * 0.4;
-    const hy = G.pivot.y + G.headDy + pitch * 9 + p.posY * 0.3 + Math.sin(p.time * 0.0022) * 1.5;
+    const hx = G.pivot.x + dx;
+    const hy = G.pivot.y + G.headDy + dy;
     ctx.translate(hx, hy);
     ctx.rotate(roll * Math.PI / 180);
     ctx.scale(1 - Math.abs(yaw) * 0.045, 1 + pitch * 0.015);
@@ -214,13 +207,22 @@ export class Character {
     ctx.globalAlpha = clamp(1 - p.eyeL, 0, 1); if (ctx.globalAlpha > 0.01) ctx.drawImage(this.eyePatchL, 0, 0);
     ctx.globalAlpha = clamp(1 - p.eyeR, 0, 1); if (ctx.globalAlpha > 0.01) ctx.drawImage(this.eyePatchR, 0, 0);
     const open = clamp(p.mouthOpen, 0, 1);
-    ctx.globalAlpha = open < 0.06 ? 0 : clamp((open - 0.06) / 0.3, 0, 1);
-    if (ctx.globalAlpha > 0.01) ctx.drawImage(this.mouthPatch, 0, 0);
+    const oa = open < 0.06 ? 0 : clamp((open - 0.06) / 0.3, 0, 1);
+    if (oa > 0.01) {
+      // per-mood open mouth where available, weighted like the mood heads
+      let rest = 1;
+      for (const m in MOOD_IMG) {
+        const w = clamp(this.moodW[m], 0, 1);
+        if (this.mouthPatch[m] && w > 0.01) { ctx.globalAlpha = oa * w; ctx.drawImage(this.mouthPatch[m], 0, 0); rest -= w; }
+      }
+      ctx.globalAlpha = oa * clamp(rest, 0, 1);
+      if (ctx.globalAlpha > 0.01) ctx.drawImage(this.mouthPatch.neutral, 0, 0);
+    }
     ctx.globalAlpha = 1;
     if (this.glasses) this.drawGlasses(ctx);
     ctx.restore();
 
-    // 3. shirt on top, with the collar opening cut out
+    // 2. shirt on top, with the collar opening cut out
     ctx.save();
     bodyTransform();
     ctx.beginPath();
