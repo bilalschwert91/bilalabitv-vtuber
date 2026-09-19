@@ -14,8 +14,11 @@ export const MOOD_LABELS = {
   neutral: 'Neutral', happy: 'Glücklich', sad: 'Enttäuscht', angry: 'Sauer', question: 'Fraglich',
 };
 
-const IMG_W = 768, IMG_H = 1376;
-const SCALE = 1.5; // internal render scale for sharper upscaling on 1080p screens
+const IMG_W = 768, IMG_H = 1376;   // base coordinate space (the original head artwork)
+const PAD = 130;                   // extra base px on each side so wide shirts/arms fit
+const OUT_W = 1080;                // output canvas width; height follows the screen aspect
+const K = OUT_W / (IMG_W + 2 * PAD); // base px -> output px
+const SCALE = 1.25;                // internal oversampling
 
 const FILES = {
   home_neutral: 'img/home_neutral.jpg',
@@ -130,9 +133,9 @@ function alignToBase(keyed) {
   const dx = (BASE_HEAD.earsL + BASE_HEAD.earsR) / 2 - ((best.l + best.r) / 2) * s;
   const dy = BASE_HEAD.earsY - best.y * s;
   const out = document.createElement('canvas');
-  out.width = IMG_W; out.height = IMG_H;
+  out.width = IMG_W + 2 * PAD; out.height = IMG_H;
   const ctx = out.getContext('2d');
-  ctx.setTransform(s, 0, 0, s, dx, dy);
+  ctx.setTransform(s, 0, 0, s, dx + PAD, dy);
   ctx.drawImage(keyed, 0, 0);
   return out;
 }
@@ -165,11 +168,11 @@ export class Character {
     this.img = {};
     this.moodW = { neutral: 1, happy: 0, sad: 0, angry: 0, question: 0 };
     this.canvas = document.createElement('canvas');
-    this.canvas.width = Math.round(IMG_W * SCALE);
-    this.canvas.height = Math.round(IMG_H * SCALE);
     this.ctx = this.canvas.getContext('2d');
     host.innerHTML = '';
     host.appendChild(this.canvas);
+    this.fitToScreen();
+    window.addEventListener('resize', () => this.fitToScreen());
     this.setFit('slice');
   }
 
@@ -198,6 +201,16 @@ export class Character {
     this.eyePatchL = makePatch(this.img.home_eyes_closed, G.eyeL);
     this.eyePatchR = makePatch(this.img.home_eyes_closed, G.eyeR);
     this.ready = true;
+  }
+
+  // Output canvas = 1080 x (screen aspect), so "cover" on the phone never crops the sides.
+  // The character is anchored at the bottom edge.
+  fitToScreen() {
+    const w = window.innerWidth || 1080, h = window.innerHeight || 1920;
+    const outH = Math.max(1920, Math.min(2600, Math.round(OUT_W * h / w)));
+    const cw = Math.round(OUT_W * SCALE), ch = Math.round(outH * SCALE);
+    if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
+    this.outH = outH;
   }
 
   setKit(kit) { if (kit === 'home' || kit === 'away' || kit === 'third') this.kit = kit; }
@@ -229,8 +242,10 @@ export class Character {
     const neck = NECK_POLYS[this.kit];
     const breathe = 1 + 0.004 * Math.sin(p.time * 0.0022);
 
-    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
-    ctx.clearRect(0, 0, IMG_W, IMG_H);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // base coordinates -> output: scaled by K, padded sideways, anchored at the bottom
+    ctx.setTransform(K * SCALE, 0, 0, K * SCALE, PAD * K * SCALE, (this.outH - IMG_H * K) * SCALE);
 
     // head motion; the shirt follows it partially so the collar opening never gaps much
     const dx = yaw * 9 + p.posX * 0.4;
@@ -281,10 +296,10 @@ export class Character {
     ctx.save();
     bodyTransform();
     ctx.beginPath();
-    ctx.rect(0, G.bodyTop, IMG_W, IMG_H - G.bodyTop);
+    ctx.rect(-PAD, G.bodyTop, IMG_W + 2 * PAD, IMG_H - G.bodyTop);
     this.poly(ctx, neck, false);
     ctx.clip('evenodd');
-    ctx.drawImage(body, 0, 0);
+    ctx.drawImage(body, -PAD, 0);
     this.drawCrest(ctx, this.kit);
     if (this.kit === 'home') this.drawSponsor(ctx);
     ctx.restore();
