@@ -88,6 +88,35 @@ function keyGreen(im) {
   return c;
 }
 
+// Head silhouette of the base artwork: top of the head and the widest row (ears)
+const BASE_HEAD = { top: 241, earsY: 533, earsL: 163, earsR: 605 };
+
+// Scale/shift a keyed image (any resolution) so its head lands exactly on the base head
+function alignToBase(keyed) {
+  const w = keyed.width, h = keyed.height;
+  const d = keyed.getContext('2d').getImageData(0, 0, w, h).data;
+  const solid = (x, y) => d[(y * w + x) * 4 + 3] > 128;
+  let top = -1;
+  const cx = w >> 1;
+  for (let y = 0; y < h; y++) if (solid(cx, y)) { top = y; break; }
+  if (top < 0) return keyed;
+  let best = { y: top, l: 0, r: 0 };
+  for (let y = top; y < h * 0.6; y += 2) {
+    let l = -1, r = -1;
+    for (let x = 0; x < w; x++) if (solid(x, y)) { if (l < 0) l = x; r = x; }
+    if (r - l > best.r - best.l) best = { y, l, r };
+  }
+  const s = (BASE_HEAD.earsR - BASE_HEAD.earsL) / (best.r - best.l);
+  const dx = (BASE_HEAD.earsL + BASE_HEAD.earsR) / 2 - ((best.l + best.r) / 2) * s;
+  const dy = BASE_HEAD.earsY - best.y * s;
+  const out = document.createElement('canvas');
+  out.width = IMG_W; out.height = IMG_H;
+  const ctx = out.getContext('2d');
+  ctx.setTransform(s, 0, 0, s, dx, dy);
+  ctx.drawImage(keyed, 0, 0);
+  return out;
+}
+
 // Copy an elliptic region of img into its own canvas with a feathered alpha edge
 function makePatch(img, e) {
   const c = document.createElement('canvas');
@@ -138,7 +167,7 @@ export class Character {
     await Promise.all(Object.keys(MOOD_OPEN).map(async (m) => {
       try {
         const im = await loadImage(MOOD_OPEN[m]);
-        this.mouthPatch[m] = makePatch(keyGreen(im), G.mouth);
+        this.mouthPatch[m] = makePatch(alignToBase(keyGreen(im)), G.mouth);
       } catch (e) { /* optional */ }
     }));
     this.eyePatchL = makePatch(this.img.home_eyes_closed, G.eyeL);
