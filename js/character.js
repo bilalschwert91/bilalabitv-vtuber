@@ -25,34 +25,51 @@ const FILES = {
   home_sad: 'img/home_sad.jpg',
   home_angry: 'img/home_angry.jpg',
   home_question: 'img/home_question.jpg',
-  away_neutral: 'img/away_neutral.jpg',
-  third_neutral: 'img/third_neutral.jpg',
 };
+// Shirt artwork per kit (any resolution, aligned to the base head at load)
+const BODY_FILES = { home: 'img/home_body.jpg', away: 'img/away_body.jpg', third: 'img/third_body.jpg' };
 
 const MOOD_IMG = { happy: 'home_happy', sad: 'home_sad', angry: 'home_angry', question: 'home_question' };
 // Optional: open-mouth versions per mood. If the file exists it is used, otherwise the neutral open mouth.
 const MOOD_OPEN = { happy: 'img/home_happy_open.jpg', sad: 'img/home_sad_open.jpg', angry: 'img/home_angry_open.jpg', question: 'img/home_question_open.jpg' };
 
 // Geometry measured from the artwork
-// Inner edge of the V collar (measured), top to the V point, right side; left is mirrored
-const COLLAR_R = [[522, 860], [516, 870], [509, 880], [502, 890], [494, 900], [485, 910], [476, 920], [466, 930], [455, 940], [444, 950], [432, 960], [419, 970], [405, 980], [390, 990], [384, 998]];
-const COLLAR_L = COLLAR_R.slice(0, -1).reverse().map(([x, y]) => [768 - x, y]);
+// V collar per kit (measured on the aligned shirt): where the collar meets the neck,
+// the V point, and the slope of the inner edge (px sideways per px down)
+const COLLAR = {
+  home:  { top: 858, vy: 966, slope: 1.40 },
+  away:  { top: 858, vy: 966, slope: 1.40 },
+  third: { top: 838, vy: 936, slope: 1.43 },
+};
 
 // Neck + chest skin inside the collar: moves with the head, the shirt is drawn over it
-const NECK_POLY = [[222, 700], [547, 700], [540, 730], [530, 760], [530, 848], ...COLLAR_R, ...COLLAR_L, [238, 848], [238, 760], [229, 730]];
+function neckPoly(kit) {
+  const k = COLLAR[kit] || COLLAR.home;
+  const right = [], left = [];
+  for (let y = k.top; y < k.vy; y += 8) {
+    const x = Math.min(530, 384 + (k.vy - y) * k.slope);
+    right.push([x, y]);
+    left.push([768 - x, y]);
+  }
+  return [[222, 700], [547, 700], [540, 730], [530, 760], ...right, [384, k.vy], ...left.reverse(), [238, 760], [229, 730]];
+}
+const NECK_POLYS = { home: neckPoly('home'), away: neckPoly('away'), third: neckPoly('third') };
 
 const G = {
-  pivot: { x: 384, y: 985 },          // base of the neck (V point), rotation pivot
+  pivot: { x: 384, y: 960 },          // base of the neck, rotation pivot
   headDy: 22,                         // push the whole head+neck unit down (shorter visible neck)
   headTop: [[0, 0], [768, 0], [768, 700], [0, 700]],
-  neck: NECK_POLY,
   bodyTop: 700,
   mouth: { x: 384, y: 690, rx: 74, ry: 46 },
   eyeL: { x: 298, y: 515, rx: 74, ry: 46 },
   eyeR: { x: 468, y: 515, rx: 74, ry: 46 },
   earL: { x: 172, y: 520 }, earR: { x: 598, y: 520 },
   sponsor: { x: 384, y: 1242, w: 346, h: 108 },
-  crest: { x: 560, y: 1104, w: 104, h: 128 },
+  crest: {
+    home: { x: 556, y: 1102, w: 104, h: 128 },
+    away: { x: 558, y: 1100, w: 104, h: 128 },
+    third: { x: 566, y: 1064, w: 112, h: 136 },
+  },
 };
 
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -101,11 +118,13 @@ function alignToBase(keyed) {
   const cx = w >> 1;
   for (let y = 0; y < h; y++) if (solid(cx, y)) { top = y; break; }
   if (top < 0) return keyed;
+  // widest row of the head = ears; stop once the silhouette narrows into the neck
   let best = { y: top, l: 0, r: 0 };
-  for (let y = top; y < h * 0.6; y += 2) {
+  for (let y = top; y < h; y += 2) {
     let l = -1, r = -1;
     for (let x = 0; x < w; x++) if (solid(x, y)) { if (l < 0) l = x; r = x; }
     if (r - l > best.r - best.l) best = { y, l, r };
+    else if (r - l < (best.r - best.l) * 0.85) break;
   }
   const s = (BASE_HEAD.earsR - BASE_HEAD.earsL) / (best.r - best.l);
   const dx = (BASE_HEAD.earsL + BASE_HEAD.earsR) / 2 - ((best.l + best.r) / 2) * s;
@@ -163,6 +182,11 @@ export class Character {
       n++;
       if (onProgress) onProgress(n, names.length);
     }));
+    this.body = {};
+    await Promise.all(Object.keys(BODY_FILES).map(async (k) => {
+      const im = await loadImage(BODY_FILES[k]);
+      this.body[k] = alignToBase(keyGreen(im));
+    }));
     // soft-edged patches so blended regions never show a hard seam
     this.mouthPatch = { neutral: makePatch(this.img.home_mouth_open, G.mouth) };
     await Promise.all(Object.keys(MOOD_OPEN).map(async (m) => {
@@ -201,7 +225,8 @@ export class Character {
     if (!this.ready) return;
     const ctx = this.ctx;
     const yaw = clamp(p.yaw, -1, 1), pitch = clamp(p.pitch, -1, 1), roll = clamp(p.roll, -7, 7);
-    const body = this.img[this.kit + '_neutral'];
+    const body = this.body[this.kit];
+    const neck = NECK_POLYS[this.kit];
     const breathe = 1 + 0.004 * Math.sin(p.time * 0.0022);
 
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
@@ -226,7 +251,7 @@ export class Character {
     ctx.scale(1 - Math.abs(yaw) * 0.045, 1 + pitch * 0.015);
     ctx.translate(-G.pivot.x, -G.pivot.y);
     this.poly(ctx, G.headTop);
-    this.poly(ctx, G.neck, false);
+    this.poly(ctx, neck, false);
     ctx.clip();
 
     ctx.drawImage(this.img.home_neutral, 0, 0);
@@ -257,7 +282,7 @@ export class Character {
     bodyTransform();
     ctx.beginPath();
     ctx.rect(0, G.bodyTop, IMG_W, IMG_H - G.bodyTop);
-    this.poly(ctx, G.neck, false);
+    this.poly(ctx, neck, false);
     ctx.clip('evenodd');
     ctx.drawImage(body, 0, 0);
     this.drawCrest(ctx, this.kit);
@@ -268,7 +293,7 @@ export class Character {
   // Club-style crest drawn over the generated one: shield, white ring, red cap,
   // yellow/navy halves, "BA" monogram. Third kit: monochrome silver.
   drawCrest(ctx, kit) {
-    const { x, y, w, h } = G.crest;
+    const { x, y, w, h } = G.crest[kit] || G.crest.home;
     const mono = kit === 'third';
     const NAVY = mono ? '#1C2B45' : '#0B2A5B';
     const YELLOW = mono ? '#B9C2CE' : '#F6D200';
