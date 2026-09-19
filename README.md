@@ -6,7 +6,7 @@ Der Charakter besteht aus neun Bildern in `img/` (mit Gemini erzeugt): neutral, 
 
 ## Funktionen
 
-- Mund (Öffnung + Breite), Blinzeln, Blickrichtung, Kopf neigen/drehen/nicken, Augenbrauen, Idle-Atmen
+- Mund auf/zu, Blinzeln, Kopf neigen/drehen/nicken, Idle-Atmen
 - Fünf Stimmungen: Neutral, Glücklich, Enttäuscht, Sauer, Fraglich
 - Drei Trikots (Saison 2026/27): Heim, Auswärts, Third
 - Sonnenbrille ein/aus
