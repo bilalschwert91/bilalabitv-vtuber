@@ -32,19 +32,27 @@ const FILES = {
 const MOOD_IMG = { happy: 'home_happy', sad: 'home_sad', angry: 'home_angry', question: 'home_question' };
 
 // Geometry measured from the artwork
+// Inner edge of the V collar (measured), top to the V point, right side; left is mirrored
+const COLLAR_R = [[522, 860], [516, 870], [509, 880], [502, 890], [494, 900], [485, 910], [476, 920], [466, 930], [455, 940], [444, 950], [432, 960], [419, 970], [405, 980], [390, 990], [384, 998]];
+const COLLAR_L = COLLAR_R.slice(0, -1).reverse().map(([x, y]) => [768 - x, y]);
+
+// Neck + chest skin inside the collar: moves with the head, the shirt is drawn over it
+const NECK_POLY = [[222, 700], [547, 700], [540, 730], [530, 760], [530, 848], ...COLLAR_R, ...COLLAR_L, [238, 848], [238, 760], [229, 730]];
+// Static skin fill behind the moving neck, inset so it never shows outside the head at rest
+const NECK_FILL = [[246, 745], [522, 745], [522, 852], ...COLLAR_R.map(([x, y]) => [x - 6, y + 2]), ...COLLAR_L.map(([x, y]) => [x + 6, y + 2]), [246, 852]];
+
 const G = {
-  pivot: { x: 384, y: 850 },          // neck base, rotation pivot
-  // head region: full width down to y=700, then along the lower beard contour (+6px)
-  headPoly: [[0, 0], [768, 0], [768, 700], [548, 700], [530, 742], [512, 764], [497, 778], [482, 795], [467, 809], [452, 819], [437, 827], [422, 829], [392, 836], [372, 836], [345, 829], [330, 826], [315, 817], [300, 805], [285, 790], [270, 775], [255, 760], [238, 742], [222, 700], [0, 700]],
-  // same contour, widened at the jaw: cut out of the body so the static beard never peeks out
-  bodyCut: [[566, 700], [544, 742], [522, 764], [503, 778], [486, 795], [469, 809], [452, 819], [437, 827], [422, 829], [392, 836], [372, 836], [345, 829], [330, 826], [315, 817], [300, 805], [285, 790], [268, 775], [248, 760], [224, 742], [202, 700]],
-  // skin fill behind the beard (inset from the jaw so nothing shows outside the head)
-  neckPatch: [[541, 706], [528, 744], [504, 772], [490, 788], [476, 805], [462, 819], [448, 829], [434, 837], [420, 839], [392, 846], [374, 846], [346, 839], [332, 836], [318, 827], [304, 815], [290, 800], [276, 785], [262, 770], [242, 744], [228, 706]],
+  pivot: { x: 384, y: 985 },          // base of the neck (V point), rotation pivot
+  headDy: 22,                         // push the whole head+neck unit down (shorter visible neck)
+  headTop: [[0, 0], [768, 0], [768, 700], [0, 700]],
+  neck: NECK_POLY,
+  neckFill: NECK_FILL,
   bodyTop: 700,
-  mouth: { x: 384, y: 688, rx: 80, ry: 50 },
-  eyeL: { x: 298, y: 515, rx: 64, ry: 38 },
-  eyeR: { x: 468, y: 515, rx: 64, ry: 38 },
+  mouth: { x: 384, y: 690, rx: 96, ry: 64 },
+  eyeL: { x: 298, y: 515, rx: 74, ry: 46 },
+  eyeR: { x: 468, y: 515, rx: 74, ry: 46 },
   earL: { x: 172, y: 520 }, earR: { x: 598, y: 520 },
+  sponsor: { x: 384, y: 1242, w: 346, h: 108 },
 };
 
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -81,6 +89,25 @@ function keyGreen(im) {
   return c;
 }
 
+// Copy an elliptic region of img into its own canvas with a feathered alpha edge
+function makePatch(img, e) {
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.scale(1, e.ry / e.rx);
+  const grad = ctx.createRadialGradient(0, 0, e.rx * 0.45, 0, 0, e.rx);
+  grad.addColorStop(0, 'rgba(0,0,0,1)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(-e.rx, -e.rx, e.rx * 2, e.rx * 2);
+  ctx.restore();
+  return c;
+}
+
 export class Character {
   constructor(host) {
     this.host = host;
@@ -110,9 +137,13 @@ export class Character {
     }));
     // neck colour per kit, sampled from the artwork
     for (const k of ['home', 'away', 'third']) {
-      const px = this.img[k + '_neutral'].getContext('2d').getImageData(384, 900, 1, 1).data;
+      const px = this.img[k + '_neutral'].getContext('2d').getImageData(384, 930, 1, 1).data;
       this.neckColor[k] = `rgb(${px[0]},${px[1]},${px[2]})`;
     }
+    // soft-edged patches so blended regions never show a hard seam
+    this.mouthPatch = makePatch(this.img.home_mouth_open, G.mouth);
+    this.eyePatchL = makePatch(this.img.home_eyes_closed, G.eyeL);
+    this.eyePatchR = makePatch(this.img.home_eyes_closed, G.eyeR);
     this.ready = true;
   }
 
@@ -140,78 +171,80 @@ export class Character {
   update(p) {
     if (!this.ready) return;
     const ctx = this.ctx;
-    const yaw = clamp(p.yaw, -1, 1), pitch = clamp(p.pitch, -1, 1), roll = clamp(p.roll, -12, 12);
+    const yaw = clamp(p.yaw, -1, 1), pitch = clamp(p.pitch, -1, 1), roll = clamp(p.roll, -7, 7);
     const body = this.img[this.kit + '_neutral'];
+    const breathe = 1 + 0.004 * Math.sin(p.time * 0.0022);
 
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
     ctx.clearRect(0, 0, IMG_W, IMG_H);
 
-    // ---- body (kit image, below the head) with light sway + breathing
-    const breathe = 1 + 0.004 * Math.sin(p.time * 0.0022);
+    // body transform: light sway + breathing (shared by the static skin fill and the shirt)
+    const bodyTransform = () => {
+      ctx.translate(IMG_W / 2, IMG_H);
+      ctx.scale(1, breathe);
+      ctx.rotate(roll * 0.12 * Math.PI / 180);
+      ctx.translate(-IMG_W / 2 + yaw * 6, -IMG_H);
+    };
+
+    // 1. static skin fill inside the collar, so head motion never reveals green
     ctx.save();
-    ctx.translate(IMG_W / 2, IMG_H);
-    ctx.scale(1, breathe);
-    ctx.rotate(roll * 0.12 * Math.PI / 180);
-    ctx.translate(-IMG_W / 2 + yaw * 6, -IMG_H);
-    // neck patch behind the beard so head motion never reveals green
+    bodyTransform();
     ctx.fillStyle = this.neckColor[this.kit] || '#c9956a';
-    this.poly(ctx, G.neckPatch);
+    this.poly(ctx, G.neckFill);
     ctx.fill();
-    // body without its own beard (the beard belongs to the moving head)
-    ctx.beginPath();
-    ctx.rect(0, G.bodyTop, IMG_W, IMG_H - G.bodyTop);
-    this.poly(ctx, G.bodyCut, false);
-    ctx.clip('evenodd');
-    ctx.drawImage(body, 0, 0);
     ctx.restore();
 
-    // ---- head transform
+    // 2. head + neck unit
     ctx.save();
-    const hx = G.pivot.x + yaw * 14 + p.posX * 0.4;
-    const hy = G.pivot.y + pitch * 9 + p.posY * 0.3 + Math.sin(p.time * 0.0022) * 1.5;
+    const hx = G.pivot.x + yaw * 10 + p.posX * 0.4;
+    const hy = G.pivot.y + G.headDy + pitch * 9 + p.posY * 0.3 + Math.sin(p.time * 0.0022) * 1.5;
     ctx.translate(hx, hy);
     ctx.rotate(roll * Math.PI / 180);
     ctx.scale(1 - Math.abs(yaw) * 0.045, 1 + pitch * 0.015);
     ctx.translate(-G.pivot.x, -G.pivot.y);
-
-    // head clip: face + beard, the neck belongs to the body layer
-    this.poly(ctx, G.headPoly);
+    this.poly(ctx, G.headTop);
+    this.poly(ctx, G.neck, false);
     ctx.clip();
 
-    // neutral head + mood heads (crossfade)
     ctx.drawImage(this.img.home_neutral, 0, 0);
     for (const m in MOOD_IMG) {
       const w = this.moodW[m];
       if (w > 0.01) { ctx.globalAlpha = clamp(w, 0, 1); ctx.drawImage(this.img[MOOD_IMG[m]], 0, 0); }
     }
-    ctx.globalAlpha = 1;
-
-    // eyes closed patches
-    this.patch(this.img.home_eyes_closed, G.eyeL, 1 - clamp(p.eyeL, 0, 1), 1);
-    this.patch(this.img.home_eyes_closed, G.eyeR, 1 - clamp(p.eyeR, 0, 1), 1);
-
-    // mouth open patch, slightly stretched with openness
+    ctx.globalAlpha = clamp(1 - p.eyeL, 0, 1); if (ctx.globalAlpha > 0.01) ctx.drawImage(this.eyePatchL, 0, 0);
+    ctx.globalAlpha = clamp(1 - p.eyeR, 0, 1); if (ctx.globalAlpha > 0.01) ctx.drawImage(this.eyePatchR, 0, 0);
     const open = clamp(p.mouthOpen, 0, 1);
-    const a = open < 0.08 ? 0 : clamp((open - 0.08) / 0.35, 0, 1);
-    this.patch(this.img.home_mouth_open, G.mouth, a, 1 + open * 0.3);
-
+    ctx.globalAlpha = open < 0.06 ? 0 : clamp((open - 0.06) / 0.3, 0, 1);
+    if (ctx.globalAlpha > 0.01) ctx.drawImage(this.mouthPatch, 0, 0);
+    ctx.globalAlpha = 1;
     if (this.glasses) this.drawGlasses(ctx);
+    ctx.restore();
+
+    // 3. shirt on top, with the collar opening cut out
+    ctx.save();
+    bodyTransform();
+    ctx.beginPath();
+    ctx.rect(0, G.bodyTop, IMG_W, IMG_H - G.bodyTop);
+    this.poly(ctx, G.neck, false);
+    ctx.clip('evenodd');
+    ctx.drawImage(body, 0, 0);
+    if (this.kit === 'home') this.drawSponsor(ctx);
     ctx.restore();
   }
 
-  // Draw an elliptic region of `img` at alpha, stretched vertically by sy around the region center
-  patch(img, e, alpha, sy) {
-    if (alpha <= 0.01) return;
-    const ctx = this.ctx;
+  drawSponsor(ctx) {
+    const s = G.sponsor;
     ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(e.x, e.y);
-    ctx.scale(1, sy);
-    ctx.translate(-e.x, -e.y);
-    ctx.beginPath();
-    ctx.ellipse(e.x, e.y, e.rx, e.ry, 0, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(img, 0, 0);
+    ctx.font = 'italic 900 64px "Arial Black", "Segoe UI Black", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const text = 'BilalAbi';
+    const w = ctx.measureText(text).width;
+    const k = Math.min(1, (s.w - 40) / w);
+    ctx.translate(s.x, s.y + 4);
+    ctx.scale(k, k);
+    ctx.fillStyle = '#0f2148';
+    ctx.fillText(text, 0, 0);
     ctx.restore();
   }
 
