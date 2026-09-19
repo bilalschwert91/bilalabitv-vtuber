@@ -1,0 +1,12 @@
+{
+  "name": "BilalAbiTV VTuber",
+  "short_name": "BilalAbiTV",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#00B140",
+  "theme_color": "#00B140",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

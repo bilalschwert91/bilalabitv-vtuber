@@ -1,0 +1,169 @@
+:root {
+  --green: #00B140;
+  --navy: #0B2A5B;
+  --yellow: #FFDD00;
+  --panel: rgba(12, 18, 32, 0.94);
+  --text: #f4f6fa;
+  --muted: #9aa5b8;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--green);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Stage */
+#stage {
+  position: fixed;
+  inset: 0;
+  background: var(--green);
+  overflow: hidden;
+}
+
+#char-host, #char-host svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#char-host svg { display: block; }
+
+/* Mood tap zones: invisible, 30px above bottom edge (iOS home gesture) */
+#zones {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 30px;
+  height: 14vh;
+  display: flex;
+  z-index: 5;
+}
+#zones[hidden] { display: none; }
+.zone { flex: 1; background: transparent; }
+
+#exit-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 18vh;
+  z-index: 5;
+  background: transparent;
+}
+#exit-zone[hidden] { display: none; }
+
+/* Camera */
+#cam-wrap {
+  position: fixed;
+  z-index: 20;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #000;
+  transition: opacity .2s;
+}
+#cam-wrap.preview-cam {
+  right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  width: 96px;
+  height: 128px;
+  opacity: 1;
+  border: 2px solid rgba(255,255,255,.6);
+}
+#cam-wrap.hidden-cam {
+  left: -10px;
+  top: -10px;
+  width: 4px;
+  height: 4px;
+  opacity: 0.01;
+  pointer-events: none;
+  border: none;
+}
+#cam {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+#cam-badge {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  font-size: 10px;
+  text-align: center;
+  background: rgba(0,0,0,.5);
+  padding: 2px 0;
+}
+
+/* Setup panel */
+#panel {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 18px 18px 0 0;
+  padding: 14px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  max-height: 62vh;
+  overflow-y: auto;
+  transition: transform .25s ease;
+}
+#panel.hidden { transform: translateY(110%); pointer-events: none; }
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.title { font-weight: 800; font-size: 18px; letter-spacing: .3px; }
+.status { font-size: 12px; color: var(--muted); }
+.status.ok { color: #7CF2A3; }
+.status.warn { color: #FFD166; }
+.status.err { color: #FF7B7B; }
+
+.row { display: flex; gap: 8px; margin: 8px 0; }
+.row button { flex: 1; }
+
+button {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 10px;
+  border-radius: 10px;
+}
+button:active { background: rgba(255,255,255,.2); }
+button.primary { background: var(--navy); border-color: #1e4a96; }
+button.rec { background: #B3261E; border-color: #e04a41; }
+
+.group { margin: 10px 0; }
+.label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }
+
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { flex: 1 1 auto; padding: 9px 8px; font-size: 13px; }
+.seg button.active { background: var(--yellow); color: #111; border-color: var(--yellow); }
+
+.toggles { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 10px 0; font-size: 14px; }
+.toggles label { display: flex; align-items: center; gap: 6px; }
+.toggles input { width: 18px; height: 18px; }
+
+.hint { font-size: 11.5px; color: var(--muted); line-height: 1.4; margin-top: 8px; }
+
+/* Setup mode: whole figure visible above the panel */
+#stage.setup #char-host {
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  height: 36vh;
+}
+#stage.setup #char-host svg { height: 100%; }

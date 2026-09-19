@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BilalAbiTV">
+  <meta name="theme-color" content="#00B140">
+  <title>BilalAbiTV VTuber</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Stage: full-screen chroma green with the character -->
+  <div id="stage">
+    <div id="char-host"></div>
+
+    <!-- Invisible mood tap zones, bottom edge (recording mode only) -->
+    <div id="zones" hidden>
+      <div class="zone" data-mood="neutral"></div>
+      <div class="zone" data-mood="happy"></div>
+      <div class="zone" data-mood="sad"></div>
+      <div class="zone" data-mood="angry"></div>
+      <div class="zone" data-mood="question"></div>
+    </div>
+
+    <!-- Invisible exit zone, top edge (double tap) -->
+    <div id="exit-zone" hidden></div>
+  </div>
+
+  <!-- Camera element: always in DOM so tracking keeps running -->
+  <div id="cam-wrap" class="hidden-cam">
+    <video id="cam" autoplay muted playsinline></video>
+    <div id="cam-badge">Kamera</div>
+  </div>
+
+  <!-- Setup panel (bottom sheet) -->
+  <div id="panel">
+    <div class="panel-head">
+      <div class="title">BilalAbiTV</div>
+      <div id="status" class="status">Kamera aus</div>
+    </div>
+
+    <div class="row">
+      <button id="btn-cam" class="primary">Kamera starten</button>
+      <button id="btn-cal">Kalibrieren</button>
+    </div>
+
+    <div class="group">
+      <div class="label">Trikot 2026/27</div>
+      <div class="seg" id="seg-kit">
+        <button data-kit="home" class="active">Heim</button>
+        <button data-kit="away">Auswärts</button>
+        <button data-kit="third">Third</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">Stimmung</div>
+      <div class="seg" id="seg-mood">
+        <button data-mood="auto" class="active">Auto</button>
+        <button data-mood="neutral">Neutral</button>
+        <button data-mood="happy">Glücklich</button>
+        <button data-mood="sad">Enttäuscht</button>
+        <button data-mood="angry">Sauer</button>
+        <button data-mood="question">Fraglich</button>
+      </div>
+    </div>
+
+    <div class="toggles">
+      <label><input type="checkbox" id="tg-glasses"> Sonnenbrille</label>
+      <label><input type="checkbox" id="tg-mirror" checked> Spiegel</label>
+      <label><input type="checkbox" id="tg-demo"> Demo-Bewegung</label>
+    </div>
+
+    <div class="row">
+      <button id="btn-rec" class="rec">Aufnahme-Modus</button>
+    </div>
+
+    <div class="hint">
+      Aufnahme-Modus: UI weg, Zonen unten = Stimmung (Neutral · Glücklich · Enttäuscht · Sauer · Fraglich).
+      Aktive Zone nochmal tippen = Auto. Doppeltipp oben = zurück ins Menü.
+      Bildschirmaufnahme über Kontrollzentrum, Mikro einschalten (Symbol lang drücken).
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
