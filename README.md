@@ -1,6 +1,8 @@
 # BilalAbiTV VTuber
 
-Web-basierter 2D-VTuber-Avatar für TikTok-Videos. Läuft komplett im Safari-Browser auf dem iPhone, kein PC und keine App nötig. Das Gesicht wird per Frontkamera mit MediaPipe Face Landmarker getrackt und auf einen SVG-Charakter übertragen.
+Web-basierter 2D-VTuber-Avatar für TikTok-Videos. Läuft komplett im Safari-Browser auf dem iPhone, kein PC und keine App nötig. Das Gesicht wird per Frontkamera mit MediaPipe Face Landmarker getrackt und auf einen gezeichneten Charakter übertragen.
+
+Der Charakter besteht aus neun Bildern in `img/` (mit Gemini erzeugt): neutral, Mund offen, Augen zu, vier Stimmungen und zwei weitere Trikots. Die App schneidet daraus Kopf, Mund und Augen aus, entfernt den grünen Hintergrund und blendet die Ebenen pro Frame auf einem Canvas zusammen.
 
 ## Funktionen
 
@@ -41,7 +43,8 @@ Die Kamera funktioniert nur über HTTPS oder `localhost`.
 
 - `index.html` – Oberfläche
 - `css/style.css` – Layout
-- `js/character.js` – SVG-Charakter, Trikots, Stimmungen
+- `js/character.js` – Canvas-Charakter aus den Bildern in `img/`, Trikots, Stimmungen, Sonnenbrille
+- `img/` – Charakter-Bilder (768x1376, grüner Hintergrund)
 - `js/tracker.js` – MediaPipe-Tracking und Kalibrierung
 - `js/app.js` – Steuerung, Glättung, Aufnahme-Modus
 

@@ -149,7 +149,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && st
 
 // ---------- animation ----------
 const cur = defaultParams();          // smoothed output
-const moodCur = { ...MOODS.neutral };  // smoothed mood blend
+let moodRoll = 0;
 let faceLostAt = null;
 
 function lerp(a, b, t) { return a + (b - a) * t; }
@@ -216,35 +216,37 @@ function frame(now) {
   // Mood blend
   const moodName = state.manualMood || (state.demo ? 'neutral' : state.autoMood);
   const mood = MOODS[moodName] || MOODS.neutral;
-  for (const k in moodCur) moodCur[k] = lerp(moodCur[k], mood[k], 0.12);
+  char.setMoodTarget(moodName);
+  moodRoll = lerp(moodRoll, mood.roll, 0.12);
 
   // Smoothing: head slower, mouth/eyes fast
   const aHead = raw ? 0.32 : 0.06, aFast = raw ? 0.6 : 0.1;
   cur.yaw = lerp(cur.yaw, target.yaw, aHead);
   cur.pitch = lerp(cur.pitch, target.pitch, aHead);
-  cur.roll = lerp(cur.roll, target.roll + moodCur.roll, aHead);
+  cur.roll = lerp(cur.roll, target.roll + moodRoll, aHead);
   cur.posX = lerp(cur.posX, target.posX, aHead);
   cur.posY = lerp(cur.posY, target.posY, aHead);
-  cur.eyeL = lerp(cur.eyeL, clamp(target.eyeL * moodCur.eyeL, 0, 1), aFast);
-  cur.eyeR = lerp(cur.eyeR, clamp(target.eyeR * moodCur.eyeR, 0, 1), aFast);
+  cur.eyeL = lerp(cur.eyeL, clamp(target.eyeL, 0, 1), aFast);
+  cur.eyeR = lerp(cur.eyeR, clamp(target.eyeR, 0, 1), aFast);
   cur.gazeX = lerp(cur.gazeX, target.gazeX, aFast);
   cur.gazeY = lerp(cur.gazeY, target.gazeY, aFast);
-  cur.browL = lerp(cur.browL, target.browL + moodCur.browL, 0.4);
-  cur.browR = lerp(cur.browR, target.browR + moodCur.browR, 0.4);
-  cur.tiltL = lerp(cur.tiltL, moodCur.tiltL, 0.4);
-  cur.tiltR = lerp(cur.tiltR, moodCur.tiltR, 0.4);
-  cur.mouthOpen = lerp(cur.mouthOpen, target.mouthOpen, aFast);
-  cur.smile = lerp(cur.smile, clamp(target.smile + moodCur.smile, -1, 1), 0.35);
+    cur.mouthOpen = lerp(cur.mouthOpen, target.mouthOpen, aFast);
+  cur.smile = lerp(cur.smile, clamp(target.smile, -1, 1), 0.35);
   cur.mouthWidth = lerp(cur.mouthWidth, target.mouthWidth, 0.35);
-  cur.skew = lerp(cur.skew, moodCur.skew, 0.3);
-
+  
   // Idle blink when no tracking
   if (!raw) {
     const b = (now % 3400) < 130 ? 0 : 1;
-    cur.eyeL = lerp(cur.eyeL, b * moodCur.eyeL, 0.5);
-    cur.eyeR = lerp(cur.eyeR, b * moodCur.eyeR, 0.5);
+    cur.eyeL = lerp(cur.eyeL, b, 0.5);
+    cur.eyeR = lerp(cur.eyeR, b, 0.5);
   }
 
   char.update(cur);
 }
+window.vt = { char, state, cur };
 requestAnimationFrame(frame);
+
+setStatus('Lade Bilder …');
+char.load((n, total) => setStatus(`Lade Bilder ${n}/${total}`)).then(() => {
+  setStatus(camStarted ? 'Tracking läuft' : 'Bereit. Kamera starten.', camStarted ? 'ok' : '');
+}).catch((err) => setStatus(err.message, 'err'));
