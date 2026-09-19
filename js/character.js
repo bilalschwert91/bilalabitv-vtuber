@@ -52,6 +52,7 @@ const G = {
   eyeR: { x: 468, y: 515, rx: 74, ry: 46 },
   earL: { x: 172, y: 520 }, earR: { x: 598, y: 520 },
   sponsor: { x: 384, y: 1242, w: 346, h: 108 },
+  crest: { x: 560, y: 1104, w: 104, h: 128 },
 };
 
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -259,7 +260,61 @@ export class Character {
     this.poly(ctx, G.neck, false);
     ctx.clip('evenodd');
     ctx.drawImage(body, 0, 0);
+    this.drawCrest(ctx, this.kit);
     if (this.kit === 'home') this.drawSponsor(ctx);
+    ctx.restore();
+  }
+
+  // Club-style crest drawn over the generated one: shield, white ring, red cap,
+  // yellow/navy halves, "BA" monogram. Third kit: monochrome silver.
+  drawCrest(ctx, kit) {
+    const { x, y, w, h } = G.crest;
+    const mono = kit === 'third';
+    const NAVY = mono ? '#1C2B45' : '#0B2A5B';
+    const YELLOW = mono ? '#B9C2CE' : '#F6D200';
+    const RED = mono ? '#6E7A8C' : '#D3202E';
+    const WHITE = mono ? '#E7EBF0' : '#FFFFFF';
+    const shield = (inset) => {
+      const hw = w / 2 - inset, top = -h / 2 + inset, bot = h / 2 - inset;
+      ctx.beginPath();
+      ctx.moveTo(-hw, top + 6);
+      ctx.quadraticCurveTo(0, top - 4, hw, top + 6);
+      ctx.lineTo(hw, bot * 0.25);
+      ctx.quadraticCurveTo(hw, bot * 0.75, 0, bot);
+      ctx.quadraticCurveTo(-hw, bot * 0.75, -hw, bot * 0.25);
+      ctx.closePath();
+    };
+    ctx.save();
+    ctx.translate(x, y);
+    // outer navy edge + white ring
+    shield(0); ctx.fillStyle = NAVY; ctx.fill();
+    shield(4); ctx.fillStyle = WHITE; ctx.fill();
+    // inner field, clipped
+    shield(13); ctx.save(); ctx.clip();
+    ctx.fillStyle = YELLOW; ctx.fillRect(-w, -h, w, 2 * h);
+    ctx.fillStyle = NAVY; ctx.fillRect(0, -h, w, 2 * h);
+    ctx.fillStyle = RED; ctx.fillRect(-w, -h, 2 * w, h / 2 + 13 + 22);
+    ctx.fillStyle = WHITE; ctx.fillRect(-w, -h / 2 + 13 + 22, 2 * w, 3);
+    ctx.restore();
+    shield(13); ctx.strokeStyle = NAVY; ctx.lineWidth = 2; ctx.stroke();
+    // monogram
+    ctx.font = '900 30px "Arial Black", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = NAVY;
+    ctx.strokeText('BA', 0, 20);
+    ctx.fillStyle = WHITE;
+    ctx.fillText('BA', 0, 20);
+    // small star above the shield (single, like a title star)
+    ctx.fillStyle = YELLOW;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 ? 3.5 : 8, a = -Math.PI / 2 + i * Math.PI / 5;
+      ctx.lineTo(Math.cos(a) * r, -h / 2 - 8 + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 
