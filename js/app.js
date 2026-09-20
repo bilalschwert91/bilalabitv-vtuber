@@ -290,6 +290,7 @@ function enterRecording() {
   $('#zones').hidden = false;
   $('#exit-zone').hidden = false;
   $('#rec-ui').hidden = !Recorder.supported();
+  $('#btn-menu').hidden = false;
   $('#prompter').hidden = !state.prText.trim();
   prScroll.scrollTop = 0; prSetRunning(false);
   syncZones();
@@ -304,12 +305,18 @@ function exitRecording() {
   $('#zones').hidden = true;
   $('#exit-zone').hidden = true;
   $('#rec-ui').hidden = true;
+  $('#btn-menu').hidden = true;
   $('#prompter').hidden = true;
   prSetRunning(false);
   releaseWakeLock();
   syncUI();
 }
 $('#btn-rec').addEventListener('click', enterRecording);
+$('#btn-menu').addEventListener('click', async () => {
+  // a running take is finished and offered for saving first
+  if (recorder.running) { recBtn.click(); await new Promise((r) => setTimeout(r, 300)); }
+  exitRecording();
+});
 
 // Mood zones: tap = set mood; tap the active one again = back to auto
 $('#zones').addEventListener('pointerdown', (e) => {
@@ -504,9 +511,10 @@ function frame(now) {
     // difference. A real blink has both values close together and is unaffected.
     const bL = clamp(raw.blinkL - Math.max(0, raw.blinkR - raw.blinkL) * 0.7, 0, 1);
     const bR = clamp(raw.blinkR - Math.max(0, raw.blinkL - raw.blinkR) * 0.7, 0, 1);
-    // Snap: below 0.3 fully open, above 0.6 fully closed, no half-transparent eyes
-    const closeL = smoothstep(0.3, 0.6, bL) + raw.squintL * 0.15;
-    const closeR = smoothstep(0.3, 0.6, bR) + raw.squintR * 0.15;
+    // Snap: below 0.45 fully open, above 0.7 fully closed. Squint is ignored: talking
+    // and smiling narrow the eyes and would read as half-blinks.
+    const closeL = smoothstep(0.45, 0.7, bL);
+    const closeR = smoothstep(0.45, 0.7, bR);
     // MediaPipe "Left" = the user's left eye. Mirrored, that is screen-left = image eyeL.
     target.eyeL = 1 - (state.mirror ? closeL : closeR);
     target.eyeR = 1 - (state.mirror ? closeR : closeL);
@@ -515,8 +523,8 @@ function frame(now) {
     target.browL = -(raw.browInnerUp * 0.6 + raw.browOuterUpL) * 22 + raw.browDownL * 14;
     target.browR = -(raw.browInnerUp * 0.6 + raw.browOuterUpR) * 22 + raw.browDownR * 14;
     // Lip sync: lip gap (fast, catches lips parting) or jaw, whichever is larger.
-    // ~0.02 of face height already counts as talking, 0.13 is fully open.
-    target.mouthOpen = Math.max(clamp((raw.lipOpen - 0.02) / 0.11, 0, 1), clamp(raw.jawOpen * 1.35, 0, 1));
+    // ~0.01 of face height above rest already counts as talking, 0.08 is fully open.
+    target.mouthOpen = Math.max(clamp((raw.lipOpen - 0.01) / 0.07, 0, 1), clamp(raw.jawOpen * 1.8, 0, 1));
     target.smile = clamp(raw.smile * 0.9 - raw.frown * 0.8, -1, 1);
     target.mouthWidth = 1 + raw.smile * 0.25 - raw.pucker * 0.35;
     if (!state.manualMood && !state.demo) detectMood(raw, now);
@@ -543,7 +551,7 @@ function frame(now) {
   cur.gazeX = lerp(cur.gazeX, target.gazeX, aFast);
   cur.gazeY = lerp(cur.gazeY, target.gazeY, aFast);
     // mouth opens almost instantly, closes a touch slower so syllables do not stutter
-    cur.mouthOpen = lerp(cur.mouthOpen, target.mouthOpen, raw ? (target.mouthOpen > cur.mouthOpen ? 0.85 : 0.55) : 0.1);
+    cur.mouthOpen = raw ? (target.mouthOpen > cur.mouthOpen ? target.mouthOpen : lerp(cur.mouthOpen, target.mouthOpen, 0.6)) : lerp(cur.mouthOpen, target.mouthOpen, 0.1);
   cur.smile = lerp(cur.smile, clamp(target.smile, -1, 1), 0.35);
   cur.mouthWidth = lerp(cur.mouthWidth, target.mouthWidth, 0.35);
   

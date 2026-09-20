@@ -398,3 +398,17 @@ button.rec { background: #B3261E; border-color: #e04a41; }
   pointer-events: none;
 }
 #debug[hidden] { display: none; }
+
+/* Menu button, recording mode */
+#btn-menu {
+  position: absolute;
+  right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  z-index: 7;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: rgba(0,0,0,.5);
+  border-color: rgba(255,255,255,.4);
+}
+#btn-menu[hidden] { display: none; }
+#debug { top: calc(env(safe-area-inset-top, 0px) + 10px); }

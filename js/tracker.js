@@ -8,7 +8,8 @@ const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmark
 // Blendshapes that describe an expression; averaged during calibration
 export const EXPR_KEYS = ['browInnerUp', 'browDownLeft', 'browDownRight', 'browOuterUpLeft', 'browOuterUpRight',
   'mouthSmileLeft', 'mouthSmileRight', 'mouthFrownLeft', 'mouthFrownRight', 'mouthLowerDownLeft', 'mouthLowerDownRight',
-  'noseSneerLeft', 'noseSneerRight', 'mouthPressLeft', 'mouthPressRight', 'eyeSquintLeft', 'eyeSquintRight'];
+  'noseSneerLeft', 'noseSneerRight', 'mouthPressLeft', 'mouthPressRight', 'eyeSquintLeft', 'eyeSquintRight',
+  'eyeBlinkLeft', 'eyeBlinkRight'];
 
 // Expression values relative to the resting face (never negative)
 export function exprFromBs(bs, rest) {
@@ -96,7 +97,7 @@ export class Tracker {
   tick(now) {
     if (!this.landmarker || this.video.readyState < 2) return null;
     if (this.video.currentTime === this.lastVideoTime) return this.raw;
-    if (now - this.lastDetect < 30) return this.raw;
+    if (now - this.lastDetect < 8) return this.raw;
     this.lastVideoTime = this.video.currentTime;
     this.lastDetect = now;
 
@@ -157,8 +158,9 @@ export class Tracker {
       roll: rollRaw,
       posX: (nose.x - 0.5) * 2,
       posY: (nose.y - 0.5) * 2,
-      blinkL: bs.eyeBlinkLeft || 0,
-      blinkR: bs.eyeBlinkRight || 0,
+      // blink relative to the resting eyes: some faces sit at 0.2-0.3 "blink" with open eyes
+      blinkL: Math.max(0, (bs.eyeBlinkLeft || 0) - ((this.cal.rest && this.cal.rest.eyeBlinkLeft) || 0)),
+      blinkR: Math.max(0, (bs.eyeBlinkRight || 0) - ((this.cal.rest && this.cal.rest.eyeBlinkRight) || 0)),
       squintL: bs.eyeSquintLeft || 0,
       squintR: bs.eyeSquintRight || 0,
       lookIn: ((bs.eyeLookInLeft || 0) + (bs.eyeLookOutRight || 0)) / 2,
