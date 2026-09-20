@@ -382,3 +382,19 @@ button.rec { background: #B3261E; border-color: #e04a41; }
 .cal-card .row { display: flex; gap: 8px; }
 .cal-card .row button { flex: 1; }
 #cal-bar.hold { background: #FFD166; }
+
+/* Debug readout */
+#debug {
+  position: absolute;
+  left: 8px;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  z-index: 7;
+  margin: 0;
+  padding: 6px 8px;
+  font: 11px/1.35 ui-monospace, Menlo, monospace;
+  color: #fff;
+  background: rgba(0,0,0,.55);
+  border-radius: 8px;
+  pointer-events: none;
+}
+#debug[hidden] { display: none; }

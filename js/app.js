@@ -178,6 +178,7 @@ $('#seg-mood').addEventListener('click', (e) => {
 $('#tg-glasses').addEventListener('change', (e) => { state.glasses = e.target.checked; save(); syncUI(); });
 $('#tg-mirror').addEventListener('change', (e) => { state.mirror = e.target.checked; save(); });
 $('#tg-demo').addEventListener('change', (e) => { state.demo = e.target.checked; });
+$('#tg-debug').addEventListener('change', (e) => { state.debug = e.target.checked; $('#debug').hidden = !state.debug; });
 
 // ---------- teleprompter ----------
 const prInput = $('#pr-input'), prSpeedIn = $('#pr-speed-in'), prSizeIn = $('#pr-size-in');
@@ -478,8 +479,11 @@ function demoRaw(t) {
   };
 }
 
+let dbgLast = 0, fps = 0, fpsLast = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  if (fpsLast) fps = lerp(fps, 1000 / Math.max(1, now - fpsLast), 0.1);
+  fpsLast = now;
   cur.time = now;
 
   let raw = null;
@@ -551,6 +555,16 @@ function frame(now) {
   }
 
   char.update(cur);
+  if (state.debug && (now - dbgLast) > 100) {
+    dbgLast = now;
+    const f = (v) => (v === undefined ? '-' : v.toFixed(2));
+    $('#debug').textContent = raw
+      ? 'lip ' + f(raw.lipOpen) + '  jaw ' + f(raw.jawOpen) + '  mund ' + f(cur.mouthOpen) +
+        '\nblinkL ' + f(raw.blinkL) + '  blinkR ' + f(raw.blinkR) + '  augeL ' + f(cur.eyeL) + '  augeR ' + f(cur.eyeR) +
+        '\nyaw ' + f(raw.yaw) + '  pitch ' + f(raw.pitch) + '  roll ' + f(raw.roll) +
+        '\nfps ' + fps.toFixed(0) + '  mood ' + state.autoMood
+      : 'kein Gesicht  fps ' + fps.toFixed(0);
+  }
   prTick(now);
   if (recorder.running) {
     const t = Math.floor(recorder.elapsed());
