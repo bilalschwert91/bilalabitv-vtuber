@@ -44,7 +44,7 @@ Die Kamera funktioniert nur über HTTPS oder `localhost`.
 - `index.html` – Oberfläche
 - `css/style.css` – Layout
 - `js/character.js` – Canvas-Charakter aus den Bildern in `img/`, Trikots, Stimmungen, Sonnenbrille
-- `img/` – Charakter-Bilder (768x1376, grüner Hintergrund)
+- `img/` – Charakter-Bilder: Kopf-Varianten (768x1376) und Trikots mit Armen (`*_body.jpg`, beliebige Auflösung, werden am Kopf ausgerichtet)
 - `js/tracker.js` – MediaPipe-Tracking und Kalibrierung
 - `js/app.js` – Steuerung, Glättung, Aufnahme-Modus
 

@@ -15,7 +15,8 @@ export const MOOD_LABELS = {
 };
 
 const IMG_W = 768, IMG_H = 1376;   // base coordinate space (the original head artwork)
-const PAD = 130;                   // extra base px on each side so wide shirts/arms fit
+const PAD = 170;                   // extra base px on each side so the arms fit
+const BODY_H = 2020;               // base px: the shirt artwork reaches down to the waist
 const OUT_W = 1080;                // output canvas width; height follows the screen aspect
 const K = OUT_W / (IMG_W + 2 * PAD); // base px -> output px
 const SCALE = 1.25;                // internal oversampling
@@ -40,9 +41,9 @@ const MOOD_OPEN = { happy: 'img/home_happy_open.jpg', sad: 'img/home_sad_open.jp
 // V collar per kit (measured on the aligned shirt): where the collar meets the neck,
 // the V point, and the slope of the inner edge (px sideways per px down)
 const COLLAR = {
-  home:  { top: 858, vy: 966, slope: 1.40 },
-  away:  { top: 858, vy: 966, slope: 1.40 },
-  third: { top: 838, vy: 936, slope: 1.43 },
+  home:  { top: 818, vy: 928, slope: 1.31 },
+  away:  { top: 831, vy: 941, slope: 1.33 },
+  third: { top: 828, vy: 933, slope: 1.39 },
 };
 
 // Neck + chest skin inside the collar: moves with the head, the shirt is drawn over it
@@ -54,24 +55,27 @@ function neckPoly(kit) {
     right.push([x, y]);
     left.push([768 - x, y]);
   }
-  return [[222, 700], [547, 700], [540, 730], [530, 760], ...right, [384, k.vy], ...left.reverse(), [238, 760], [229, 730]];
+  const poly = [[222, 700], [547, 700], [540, 730], [530, 760], ...right, [384, k.vy], ...left.slice().reverse(), [238, 760], [229, 730]];
+  // skin fill strictly inside the collar opening (never visible outside the shirt)
+  const fill = [[246, k.top - 2], [522, k.top - 2], ...right.slice(1), [384, k.vy], ...left.slice(1).reverse()];
+  return { poly, fill };
 }
-const NECK_POLYS = { home: neckPoly('home'), away: neckPoly('away'), third: neckPoly('third') };
+const NECK = { home: neckPoly('home'), away: neckPoly('away'), third: neckPoly('third') };
 
 const G = {
-  pivot: { x: 384, y: 960 },          // base of the neck, rotation pivot
-  headDy: 22,                         // push the whole head+neck unit down (shorter visible neck)
+  pivot: { x: 384, y: 930 },          // base of the neck, rotation pivot
+  headDy: 0,                          // vertical offset of the head+neck unit
   headTop: [[0, 0], [768, 0], [768, 700], [0, 700]],
   bodyTop: 700,
   mouth: { x: 384, y: 690, rx: 74, ry: 46 },
   eyeL: { x: 298, y: 515, rx: 74, ry: 46 },
   eyeR: { x: 468, y: 515, rx: 74, ry: 46 },
   earL: { x: 172, y: 520 }, earR: { x: 598, y: 520 },
-  sponsor: { x: 384, y: 1242, w: 346, h: 108 },
+  sponsor: { x: 384, y: 1257, w: 400, h: 140 },
   crest: {
-    home: { x: 556, y: 1102, w: 104, h: 128 },
-    away: { x: 558, y: 1100, w: 104, h: 128 },
-    third: { x: 566, y: 1064, w: 112, h: 136 },
+    home: { x: 570, y: 1065, w: 108, h: 132 },
+    away: { x: 570, y: 1079, w: 108, h: 132 },
+    third: { x: 567, y: 1072, w: 108, h: 132 },
   },
 };
 
@@ -133,7 +137,7 @@ function alignToBase(keyed) {
   const dx = (BASE_HEAD.earsL + BASE_HEAD.earsR) / 2 - ((best.l + best.r) / 2) * s;
   const dy = BASE_HEAD.earsY - best.y * s;
   const out = document.createElement('canvas');
-  out.width = IMG_W + 2 * PAD; out.height = IMG_H;
+  out.width = IMG_W + 2 * PAD; out.height = BODY_H;
   const ctx = out.getContext('2d');
   ctx.setTransform(s, 0, 0, s, dx + PAD, dy);
   ctx.drawImage(keyed, 0, 0);
@@ -185,6 +189,8 @@ export class Character {
       n++;
       if (onProgress) onProgress(n, names.length);
     }));
+    const px = this.img.home_neutral.getContext('2d').getImageData(384, 905, 1, 1).data;
+    this.neckColor = `rgb(${px[0]},${px[1]},${px[2]})`;
     this.body = {};
     await Promise.all(Object.keys(BODY_FILES).map(async (k) => {
       const im = await loadImage(BODY_FILES[k]);
@@ -239,23 +245,31 @@ export class Character {
     const ctx = this.ctx;
     const yaw = clamp(p.yaw, -1, 1), pitch = clamp(p.pitch, -1, 1), roll = clamp(p.roll, -7, 7);
     const body = this.body[this.kit];
-    const neck = NECK_POLYS[this.kit];
+    const neck = NECK[this.kit].poly;
     const breathe = 1 + 0.004 * Math.sin(p.time * 0.0022);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     // base coordinates -> output: scaled by K, padded sideways, anchored at the bottom
-    ctx.setTransform(K * SCALE, 0, 0, K * SCALE, PAD * K * SCALE, (this.outH - IMG_H * K) * SCALE);
+    ctx.setTransform(K * SCALE, 0, 0, K * SCALE, PAD * K * SCALE, (this.outH - BODY_H * K) * SCALE);
 
     // head motion; the shirt follows it partially so the collar opening never gaps much
     const dx = yaw * 9 + p.posX * 0.4;
     const dy = pitch * 7 + p.posY * 0.3 + Math.sin(p.time * 0.0022) * 1.5;
     const bodyTransform = () => {
-      ctx.translate(IMG_W / 2, IMG_H);
+      ctx.translate(IMG_W / 2, BODY_H);
       ctx.scale(1, breathe);
       ctx.rotate(roll * 0.4 * Math.PI / 180);
-      ctx.translate(-IMG_W / 2 + dx * 0.55, -IMG_H + dy * 0.4);
+      ctx.translate(-IMG_W / 2 + dx * 0.55, -BODY_H + dy * 0.4);
     };
+
+    // 0. chest skin inside the collar opening, so head motion shows skin there, not green
+    ctx.save();
+    bodyTransform();
+    ctx.fillStyle = this.neckColor;
+    this.poly(ctx, NECK[this.kit].fill);
+    ctx.fill();
+    ctx.restore();
 
     // 1. head + neck unit
     ctx.save();
@@ -296,7 +310,7 @@ export class Character {
     ctx.save();
     bodyTransform();
     ctx.beginPath();
-    ctx.rect(-PAD, G.bodyTop, IMG_W + 2 * PAD, IMG_H - G.bodyTop);
+    ctx.rect(-PAD, G.bodyTop, IMG_W + 2 * PAD, BODY_H - G.bodyTop);
     this.poly(ctx, neck, false);
     ctx.clip('evenodd');
     ctx.drawImage(body, -PAD, 0);
@@ -361,7 +375,7 @@ export class Character {
   drawSponsor(ctx) {
     const s = G.sponsor;
     ctx.save();
-    ctx.font = 'italic 900 64px "Arial Black", "Segoe UI Black", Arial, sans-serif';
+    ctx.font = 'italic 900 78px "Arial Black", "Segoe UI Black", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const text = 'BilalAbi';
