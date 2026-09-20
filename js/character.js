@@ -325,7 +325,8 @@ export class Character {
     ctx.globalAlpha = clamp(1 - p.eyeL, 0, 1); if (ctx.globalAlpha > 0.01) ctx.drawImage(this.eyePatchL, 0, 0);
     ctx.globalAlpha = clamp(1 - p.eyeR, 0, 1); if (ctx.globalAlpha > 0.01) ctx.drawImage(this.eyePatchR, 0, 0);
     const open = clamp(p.mouthOpen, 0, 1);
-    const oa = open < 0.06 ? 0 : clamp((open - 0.06) / 0.3, 0, 1);
+    // short crossfade (about one or two frames) instead of a long half-transparent blend
+    const oa = open < 0.08 ? 0 : clamp((open - 0.08) / 0.14, 0, 1);
     if (oa > 0.01) {
       // per-mood open mouth where available, weighted like the mood heads
       let rest = 1;

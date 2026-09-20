@@ -95,7 +95,7 @@ async function runCalibration() {
   if (!r) { hideCalibration(); setStatus('Kalibrierung abgebrochen', 'warn'); return; }
   const moods = {};
   for (const k of ['happy', 'angry', 'sad', 'question']) if (run.results[k]) moods[k] = run.results[k].bs;
-  state.cal = { yawOff: r.yawRaw, pitchRatio: r.pitchRatio, rest: r.bs, moods };
+  state.cal = { yawOff: r.yawRaw, pitchRatio: r.pitchRatio, rest: r.bs, moods, lipRest: r.lipGap || 0 };
   tracker.setCalibration(state.cal);
   applyMoodCalibration();
   save();
@@ -473,7 +473,7 @@ function demoRaw(t) {
     blinkL: (s % 3.1) < 0.15 ? 1 : 0, blinkR: (s % 3.1) < 0.15 ? 1 : 0, squintL: 0, squintR: 0,
     lookIn: 0, lookOut: Math.max(0, Math.sin(s * 0.7)) * 0.5, lookUp: 0, lookDown: 0,
     browInnerUp: 0, browDownL: 0, browDownR: 0, browOuterUpL: 0, browOuterUpR: 0,
-    jawOpen: Math.max(0, Math.sin(s * 9)) * 0.55 * (Math.sin(s * 1.3) > -0.3 ? 1 : 0),
+    jawOpen: Math.max(0, Math.sin(s * 9)) * 0.55 * (Math.sin(s * 1.3) > -0.3 ? 1 : 0), lipOpen: 0,
     smile: 0, frown: 0, mouthDown: 0, mouthPress: 0, noseSneer: 0, squint: 0, pucker: 0,
   };
 }
@@ -510,7 +510,9 @@ function frame(now) {
     target.gazeY = raw.lookDown - raw.lookUp;
     target.browL = -(raw.browInnerUp * 0.6 + raw.browOuterUpL) * 22 + raw.browDownL * 14;
     target.browR = -(raw.browInnerUp * 0.6 + raw.browOuterUpR) * 22 + raw.browDownR * 14;
-    target.mouthOpen = clamp(raw.jawOpen * 1.35, 0, 1);
+    // Lip sync: lip gap (fast, catches lips parting) or jaw, whichever is larger.
+    // ~0.02 of face height already counts as talking, 0.13 is fully open.
+    target.mouthOpen = Math.max(clamp((raw.lipOpen - 0.02) / 0.11, 0, 1), clamp(raw.jawOpen * 1.35, 0, 1));
     target.smile = clamp(raw.smile * 0.9 - raw.frown * 0.8, -1, 1);
     target.mouthWidth = 1 + raw.smile * 0.25 - raw.pucker * 0.35;
     if (!state.manualMood && !state.demo) detectMood(raw, now);
@@ -536,7 +538,8 @@ function frame(now) {
   cur.eyeR = lerp(cur.eyeR, clamp(target.eyeR, 0, 1), aFast);
   cur.gazeX = lerp(cur.gazeX, target.gazeX, aFast);
   cur.gazeY = lerp(cur.gazeY, target.gazeY, aFast);
-    cur.mouthOpen = lerp(cur.mouthOpen, target.mouthOpen, aFast);
+    // mouth opens almost instantly, closes a touch slower so syllables do not stutter
+    cur.mouthOpen = lerp(cur.mouthOpen, target.mouthOpen, raw ? (target.mouthOpen > cur.mouthOpen ? 0.85 : 0.55) : 0.1);
   cur.smile = lerp(cur.smile, clamp(target.smile, -1, 1), 0.35);
   cur.mouthWidth = lerp(cur.mouthWidth, target.mouthWidth, 0.35);
   

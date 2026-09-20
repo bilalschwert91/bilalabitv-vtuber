@@ -30,7 +30,7 @@ export function exprFromBs(bs, rest) {
 }
 
 // Landmark indices (MediaPipe 478-point mesh)
-const LM = { nose: 1, eyeLOuter: 33, eyeROuter: 263, faceL: 234, faceR: 454, chin: 152, forehead: 10 };
+const LM = { nose: 1, eyeLOuter: 33, eyeROuter: 263, faceL: 234, faceR: 454, chin: 152, forehead: 10, lipUp: 13, lipLo: 14 };
 
 export class Tracker {
   constructor(video) {
@@ -41,7 +41,7 @@ export class Tracker {
     this.face = false;
     this.raw = null;
     // pose offsets, the resting face and one blendshape average per calibrated mood
-    this.cal = { pitchRatio: 0.42, yawOff: 0, rest: null, moods: null };
+    this.cal = { pitchRatio: 0.42, yawOff: 0, rest: null, moods: null, lipRest: 0 };
     this.capture = null;             // active sample window, see startCapture()
     this.onStatus = () => {};
     this.onCalProgress = () => {};   // (0..1, faceVisible)
@@ -125,13 +125,17 @@ export class Tracker {
     const yawRaw = (nose.x - midX) / halfW;          // image space, +x = image right
     const pitchRatio = (nose.y - eyeMidY) / faceH;   // ~0.42 neutral, larger = head down
     const rollRaw = Math.atan2(er.y - el.y, er.x - el.x) * 180 / Math.PI;
+    // inner lip gap relative to face height: the direct lip-sync signal, reacts to
+    // lips parting even when the jaw barely moves (unlike the jawOpen blendshape)
+    const lu = lm[LM.lipUp], ll = lm[LM.lipLo];
+    const lipGap = Math.hypot(ll.x - lu.x, ll.y - lu.y) / faceH;
 
     if (this.capture) {
       const c = this.capture;
       // Head must hold still: a jump resets the sample window
       const last = c.samples[c.samples.length - 1];
       if (last && (Math.abs(last.yawRaw - yawRaw) > 0.1 || Math.abs(last.pitchRatio - pitchRatio) > 0.04)) c.samples = [];
-      c.samples.push({ yawRaw, pitchRatio, bs: EXPR_KEYS.map((k) => bs[k] || 0) });
+      c.samples.push({ yawRaw, pitchRatio, lipGap, bs: EXPR_KEYS.map((k) => bs[k] || 0) });
       this.onCalProgress(Math.min(1, c.samples.length / c.need), true);
       if (c.samples.length >= c.need) {
         const n = c.samples.length;
@@ -140,6 +144,7 @@ export class Tracker {
         this.capture = null;
         c.resolve({
           yawRaw: c.samples.reduce((a, s) => a + s.yawRaw, 0) / n,
+          lipGap: c.samples.reduce((a, s) => a + s.lipGap, 0) / n,
           pitchRatio: c.samples.reduce((a, s) => a + s.pitchRatio, 0) / n,
           bs: avg,
         });
@@ -161,6 +166,7 @@ export class Tracker {
       lookUp: ((bs.eyeLookUpLeft || 0) + (bs.eyeLookUpRight || 0)) / 2,
       lookDown: ((bs.eyeLookDownLeft || 0) + (bs.eyeLookDownRight || 0)) / 2,
       jawOpen: bs.jawOpen || 0,
+      lipOpen: Math.max(0, lipGap - (this.cal.lipRest || 0)),
       pucker: Math.max(bs.mouthPucker || 0, bs.mouthFunnel || 0),
       // expression values relative to the calibrated resting face
       ...exprFromBs(bs, this.cal.rest),
