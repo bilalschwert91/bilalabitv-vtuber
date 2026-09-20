@@ -114,6 +114,25 @@ function keyGreen(im) {
   return c;
 }
 
+// Key only the exact background colour (sampled at the corner), so green details
+// inside a logo survive
+function keyBackground(im) {
+  const c = document.createElement('canvas');
+  c.width = im.width; c.height = im.height;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(im, 0, 0);
+  const id = ctx.getImageData(0, 0, c.width, c.height);
+  const d = id.data;
+  const br = d[(2 * c.width + 2) * 4], bg = d[(2 * c.width + 2) * 4 + 1], bb = d[(2 * c.width + 2) * 4 + 2];
+  for (let i = 0; i < d.length; i += 4) {
+    const dist = Math.hypot(d[i] - br, d[i + 1] - bg, d[i + 2] - bb);
+    if (dist < 28) { d[i + 3] = 0; continue; }
+    if (dist < 48) d[i + 3] = Math.round(255 * (dist - 28) / 20);
+  }
+  ctx.putImageData(id, 0, 0);
+  return c;
+}
+
 // Head silhouette of the base artwork: top of the head and the widest row (ears)
 const BASE_HEAD = { top: 241, earsY: 533, earsL: 163, earsR: 605 };
 
@@ -202,7 +221,7 @@ export class Character {
     this.neckColor = `rgb(${px[0]},${px[1]},${px[2]})`;
     // optional custom logo
     for (const src of ['img/logo.png', 'img/logo.jpg', 'img/logo.webp']) {
-      try { const im = await loadImage(src); this.logo = keyGreen(im); break; } catch (e) { /* optional */ }
+      try { const im = await loadImage(src); this.logo = keyBackground(im); break; } catch (e) { /* optional */ }
     }
     this.body = {};
     await Promise.all(Object.keys(BODY_FILES).map(async (k) => {
@@ -358,7 +377,7 @@ export class Character {
   drawLogoImage(ctx, kit) {
     const { x, y, w, h } = G.crest[kit] || G.crest.home;
     const im = this.logo;
-    const s = Math.min((w * 1.35) / im.width, (h * 1.35) / im.height);
+    const s = Math.min((w * 1.5) / im.width, (h * 1.5) / im.height);
     const dw = im.width * s, dh = im.height * s;
     ctx.save();
     if (kit === 'third') ctx.filter = 'grayscale(1) brightness(1.15)';
