@@ -19,7 +19,8 @@ const PAD = 170;                   // extra base px on each side so the arms fit
 const BODY_H = 1620;               // base px: crop just above the navel
 const OUT_W = 1080;                // output canvas width; height follows the screen aspect
 const K = OUT_W / (IMG_W + 2 * PAD); // base px -> output px
-const SCALE = 1.25;                // internal oversampling
+const MAX_SCALE = 1.25;            // internal oversampling
+const MAX_CANVAS_H = 2048;         // keep the backing store within one GPU texture tile
 
 const FILES = {
   home_neutral: 'img/home_neutral.jpg',
@@ -222,7 +223,8 @@ export class Character {
   fitToScreen() {
     const w = window.innerWidth || 1080, h = window.innerHeight || 1920;
     const outH = Math.max(1920, Math.min(2600, Math.round(OUT_W * h / w)));
-    const cw = Math.round(OUT_W * SCALE), ch = Math.round(outH * SCALE);
+    this.S = Math.min(MAX_SCALE, MAX_CANVAS_H / outH);
+    const cw = Math.round(OUT_W * this.S), ch = Math.round(outH * this.S);
     if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
     this.outH = outH;
   }
@@ -259,7 +261,7 @@ export class Character {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     // base coordinates -> output: scaled by K, padded sideways, anchored at the bottom
-    ctx.setTransform(K * SCALE, 0, 0, K * SCALE, PAD * K * SCALE, (this.outH - BODY_H * K) * SCALE);
+    ctx.setTransform(K * this.S, 0, 0, K * this.S, PAD * K * this.S, (this.outH - BODY_H * K) * this.S);
 
     // head motion; the shirt follows it partially so the collar opening never gaps much
     const dx = yaw * 9 + p.posX * 0.4;
@@ -323,61 +325,103 @@ export class Character {
     this.poly(ctx, neck, false);
     ctx.clip('evenodd');
     ctx.drawImage(body, -PAD, 0);
-    this.drawCrest(ctx, this.kit);
-    if (this.kit === 'home') this.drawSponsor(ctx);
+    this.drawDecals(ctx, this.kit);
     ctx.restore();
   }
 
-  // Club-style crest drawn over the generated one: shield, white ring, red cap,
-  // yellow/navy halves, "BA" monogram. Third kit: monochrome silver.
+  // Round club-style emblem drawn over the generated crest: navy edge, white ring with
+  // text, red upper field, yellow/navy lower halves, white oak leaf. Third kit: silver.
+  // Crest and sponsor text are rendered once per kit into an offscreen canvas and then
+  // blitted every frame (text rasterization per frame is slow and glitchy on some GPUs).
+  drawDecals(ctx, kit) {
+    this.decals = this.decals || {};
+    if (!this.decals[kit]) {
+      const cv = document.createElement('canvas');
+      const S = 3;
+      cv.width = IMG_W * S; cv.height = 300 * S;
+      const dc = cv.getContext('2d');
+      dc.setTransform(S, 0, 0, S, 0, -1000 * S);
+      this.drawCrest(dc, kit);
+      if (kit === 'home') this.drawSponsor(dc);
+      this.decals[kit] = { cv, S };
+    }
+    const { cv, S } = this.decals[kit];
+    ctx.drawImage(cv, 0, 1000, IMG_W, 300);
+  }
+
   drawCrest(ctx, kit) {
-    const { x, y, w, h } = G.crest[kit] || G.crest.home;
+    const { x, y, w } = G.crest[kit] || G.crest.home;
+    const r = w * 0.56;
     const mono = kit === 'third';
     const NAVY = mono ? '#1C2B45' : '#0B2A5B';
     const YELLOW = mono ? '#B9C2CE' : '#F6D200';
     const RED = mono ? '#6E7A8C' : '#D3202E';
     const WHITE = mono ? '#E7EBF0' : '#FFFFFF';
-    const shield = (inset) => {
-      const hw = w / 2 - inset, top = -h / 2 + inset, bot = h / 2 - inset;
-      ctx.beginPath();
-      ctx.moveTo(-hw, top + 6);
-      ctx.quadraticCurveTo(0, top - 4, hw, top + 6);
-      ctx.lineTo(hw, bot * 0.25);
-      ctx.quadraticCurveTo(hw, bot * 0.75, 0, bot);
-      ctx.quadraticCurveTo(-hw, bot * 0.75, -hw, bot * 0.25);
-      ctx.closePath();
-    };
+    const circle = (rad) => { ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.closePath(); };
     ctx.save();
     ctx.translate(x, y);
-    // outer navy edge + white ring
-    shield(0); ctx.fillStyle = NAVY; ctx.fill();
-    shield(4); ctx.fillStyle = WHITE; ctx.fill();
-    // inner field, clipped
-    shield(13); ctx.save(); ctx.clip();
-    ctx.fillStyle = YELLOW; ctx.fillRect(-w, -h, w, 2 * h);
-    ctx.fillStyle = NAVY; ctx.fillRect(0, -h, w, 2 * h);
-    ctx.fillStyle = RED; ctx.fillRect(-w, -h, 2 * w, h / 2 + 13 + 22);
-    ctx.fillStyle = WHITE; ctx.fillRect(-w, -h / 2 + 13 + 22, 2 * w, 3);
+    // edge + ring
+    circle(r); ctx.fillStyle = NAVY; ctx.fill();
+    circle(r - 3); ctx.fillStyle = WHITE; ctx.fill();
+    // inner field
+    const ri = r - 15;
+    circle(ri); ctx.save(); ctx.clip();
+    ctx.fillStyle = YELLOW; ctx.fillRect(-ri, -ri, ri, 2 * ri);
+    ctx.fillStyle = NAVY; ctx.fillRect(0, -ri, ri, 2 * ri);
+    const split = -ri * 0.22;
+    ctx.fillStyle = RED; ctx.fillRect(-ri, -ri, 2 * ri, split + ri);
+    ctx.fillStyle = WHITE; ctx.fillRect(-ri, split - 1.5, 2 * ri, 3);
     ctx.restore();
-    shield(13); ctx.strokeStyle = NAVY; ctx.lineWidth = 2; ctx.stroke();
-    // monogram
-    ctx.font = '900 30px "Arial Black", Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = NAVY;
-    ctx.strokeText('BA', 0, 20);
-    ctx.fillStyle = WHITE;
-    ctx.fillText('BA', 0, 20);
-    // small star above the shield (single, like a title star)
-    ctx.fillStyle = YELLOW;
+    circle(ri); ctx.strokeStyle = NAVY; ctx.lineWidth = 2; ctx.stroke();
+    // oak leaf
+    ctx.save();
+    ctx.translate(0, ri * 0.18);
+    const L = ri * 0.62;
     ctx.beginPath();
-    for (let i = 0; i < 10; i++) {
-      const r = i % 2 ? 3.5 : 8, a = -Math.PI / 2 + i * Math.PI / 5;
-      ctx.lineTo(Math.cos(a) * r, -h / 2 - 8 + Math.sin(a) * r);
+    ctx.moveTo(0, -L);
+    for (let i = 1; i <= 4; i++) {
+      const t = i / 4, yy = -L + t * 2 * L * 0.92;
+      const wv = L * 0.42 * Math.sin(Math.PI * t) * (i % 2 ? 1.25 : 0.85);
+      ctx.quadraticCurveTo(wv * 1.4, yy - L * 0.12, wv * 0.6, yy);
+    }
+    ctx.lineTo(0, L);
+    for (let i = 4; i >= 1; i--) {
+      const t = i / 4, yy = -L + t * 2 * L * 0.92;
+      const wv = L * 0.42 * Math.sin(Math.PI * t) * (i % 2 ? 1.25 : 0.85);
+      ctx.quadraticCurveTo(-wv * 1.4, yy - L * 0.12, i === 1 ? 0 : -wv * 0.6, i === 1 ? -L : yy);
     }
     ctx.closePath();
-    ctx.fill();
+    ctx.fillStyle = WHITE; ctx.fill();
+    ctx.strokeStyle = NAVY; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -L * 0.8); ctx.lineTo(0, L); ctx.stroke();
+    ctx.restore();
+    // ring text
+    ctx.fillStyle = NAVY;
+    ctx.font = `900 ${Math.round(r * 0.19)}px "Arial Black", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    this.arcText(ctx, 'BILALABI', r - 9, -Math.PI / 2, 1);
+    this.arcText(ctx, 'TV', r - 9, Math.PI / 2, -1);
+    ctx.restore();
+  }
+
+  // Text along a circle: centerAngle in radians, dir 1 = reads clockwise over the top
+  arcText(ctx, text, radius, centerAngle, dir) {
+    const chars = text.split('');
+    const widths = chars.map((ch) => ctx.measureText(ch).width);
+    const total = widths.reduce((a, b) => a + b, 0) + (chars.length - 1) * 2.4;
+    let a = centerAngle - dir * (total / 2) / radius;
+    ctx.save();
+    for (let i = 0; i < chars.length; i++) {
+      const ca = a + dir * (widths[i] / 2) / radius;
+      ctx.save();
+      ctx.rotate(ca + Math.PI / 2);
+      ctx.translate(0, -radius * dir);
+      if (dir < 0) ctx.rotate(Math.PI);
+      ctx.fillText(chars[i], 0, 0);
+      ctx.restore();
+      a += dir * (widths[i] + 2.4) / radius;
+    }
     ctx.restore();
   }
 
