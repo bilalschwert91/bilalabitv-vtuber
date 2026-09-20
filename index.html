@@ -28,10 +28,25 @@
       <div class="zone" data-mood="question">Fraglich</div>
     </div>
 
-    <!-- Record button + timer (recording mode only) -->
+    <!-- Teleprompter (recording mode only, not part of the video) -->
+    <div id="prompter" hidden>
+      <div id="prompter-scroll"><div id="prompter-text"></div></div>
+      <div id="prompter-bar">
+        <button id="pr-slower" aria-label="Langsamer">−</button>
+        <span id="pr-speed">1.0×</span>
+        <button id="pr-faster" aria-label="Schneller">+</button>
+        <button id="pr-play" aria-label="Scrollen starten/pausieren">▶</button>
+        <button id="pr-top" aria-label="Zum Anfang">⤒</button>
+      </div>
+    </div>
+
+    <!-- Record controls (recording mode only, not part of the video) -->
     <div id="rec-ui" hidden>
+      <button id="rec-restart" class="side" aria-label="Aufnahme neu starten" hidden>↺</button>
       <button id="rec-toggle" aria-label="Aufnahme starten/stoppen"></button>
+      <button id="rec-pause" class="side" aria-label="Pause/Weiter" hidden>❙❙</button>
       <div id="rec-time">00:00</div>
+      <div id="rec-hint"></div>
     </div>
 
     <!-- Invisible exit zone, top edge (double tap) -->
@@ -42,6 +57,22 @@
   <div id="cam-wrap" class="hidden-cam">
     <video id="cam" autoplay muted playsinline></video>
     <div id="cam-badge">Kamera</div>
+  </div>
+
+  <!-- Calibration guide -->
+  <div id="cal-overlay" hidden>
+    <div class="cal-card">
+      <div class="cal-title">Kalibrierung</div>
+      <ol class="cal-steps">
+        <li>Handy gerade vor das Gesicht halten, Augenhöhe</li>
+        <li>Direkt in die Kamera schauen, Kopf gerade</li>
+        <li>Entspanntes Gesicht: Mund zu, nicht lächeln, Brauen locker</li>
+        <li>Stillhalten bis der Balken voll ist</li>
+      </ol>
+      <div class="cal-progress"><div id="cal-bar"></div></div>
+      <div id="cal-msg" class="cal-msg">Suche Gesicht …</div>
+      <button id="cal-cancel">Abbrechen</button>
+    </div>
   </div>
 
   <!-- Setup panel (bottom sheet) -->
@@ -77,6 +108,15 @@
       </div>
     </div>
 
+    <div class="group">
+      <div class="label">Teleprompter</div>
+      <textarea id="pr-input" rows="4" placeholder="Text hier einfügen. Läuft im Aufnahme-Modus oben über dem Kopf mit, ist nicht im Video."></textarea>
+      <div class="pr-opts">
+        <label>Tempo <input type="range" id="pr-speed-in" min="10" max="120" step="5" value="40"> <span id="pr-speed-lbl">40</span> px/s</label>
+        <label>Schrift <input type="range" id="pr-size-in" min="18" max="40" step="2" value="26"> <span id="pr-size-lbl">26</span> px</label>
+      </div>
+    </div>
+
     <div class="toggles">
       <label><input type="checkbox" id="tg-glasses"> Sonnenbrille</label>
       <label><input type="checkbox" id="tg-mirror" checked> Spiegel</label>
@@ -89,6 +129,7 @@
 
     <div class="hint">
       Aufnahme-Modus: roter Knopf = Aufnahme mit Mikro starten/stoppen, danach „Video sichern“ in Fotos.
+      ❙❙ = Pause, ↺ = Aufnahme verwerfen und neu starten (zweimal tippen).
       Zonen unten = Stimmung, aktive Zone nochmal tippen = Auto. Doppeltipp oben = zurück ins Menü.
     </div>
   </div>

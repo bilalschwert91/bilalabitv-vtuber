@@ -10,7 +10,9 @@ Der Charakter besteht aus neun Bildern in `img/` (mit Gemini erzeugt): neutral, 
 - Fünf Stimmungen: Neutral, Glücklich, Enttäuscht, Sauer, Fraglich
 - Drei Trikots (Saison 2026/27): Heim, Auswärts, Third
 - Sonnenbrille ein/aus
-- Aufnahme direkt in der App: Charakter + Mikrofon als MP4, „Video sichern“ legt es in Fotos ab
+- Aufnahme direkt in der App: Charakter + Mikrofon als MP4, Pause und Neustart, „Video sichern“ legt es in Fotos ab
+- Teleprompter: Text im Menü einfügen, läuft im Aufnahme-Modus über dem Kopf mit, Tempo und Schriftgröße einstellbar, nicht im Video
+- Geführte Kalibrierung mit Kamerabild und Fortschrittsbalken
 - Chroma-Grün (`#00B140`) als Hintergrund für CapCut-Chroma-Key
 - Einstellungen und Kalibrierung werden im Browser gespeichert
 
@@ -18,10 +20,10 @@ Der Charakter besteht aus neun Bildern in `img/` (mit Gemini erzeugt): neutral, 
 
 1. Seite in Safari öffnen: `https://bilalschwert91.github.io/bilalabitv-vtuber/`
 2. Optional: Teilen > „Zum Home-Bildschirm“. Dann läuft die App im Vollbild und die Kamera-Erlaubnis bleibt gespeichert.
-3. „Kamera starten“ tippen, Kamerazugriff erlauben. Beim ersten Start kalibriert die App automatisch: 1–2 Sekunden gerade in die Kamera schauen.
+3. „Kamera starten“ tippen, Kamerazugriff erlauben. Beim ersten Start öffnet sich die Kalibrierung: Handy auf Augenhöhe, gerade in die Kamera schauen, entspanntes Gesicht, stillhalten bis der Balken voll ist. Die App merkt sich so das Ruhegesicht, daran misst sie später die Stimmungen. Später über „Kalibrieren“ wiederholbar.
 4. Trikot, Sonnenbrille und Stimmung im Menü wählen.
 5. „Aufnahme-Modus“ tippen. Menü und Kamera-Vorschau verschwinden.
-6. Roten Knopf rechts tippen. Beim ersten Mal Mikrofon erlauben. Der Zähler läuft.
+6. Roten Knopf rechts tippen. Beim ersten Mal Mikrofon erlauben. Der Zähler läuft. ❙❙ pausiert (zum Nachdenken), ↺ zweimal tippen verwirft die Aufnahme und startet neu.
 7. Sprechen. Stimmung über die fünf Zonen am unteren Bildschirmrand wechseln (Neutral, Glücklich, Enttäuscht, Sauer, Fraglich). Aktive Zone erneut tippen schaltet zurück auf Auto. Knöpfe und Zonen sind nicht im Video, aufgenommen wird nur der Charakter.
 8. Roten Knopf erneut tippen. Im Teilen-Menü „Video sichern“ wählen, das MP4 liegt dann in Fotos.
 9. Doppeltipp am oberen Bildschirmrand führt zurück ins Menü.
@@ -31,7 +33,7 @@ Alternative ohne App-Aufnahme: Bildschirmaufnahme über das Kontrollzentrum, Mik
 
 ## Stimmungs-Automatik
 
-Wenn keine Zone aktiv ist, erkennt die App die Stimmung aus dem Gesicht: Lächeln = Glücklich, zusammengezogene Brauen = Sauer, innere Brauen hoch + Mundwinkel runter = Enttäuscht, eine Braue hoch = Fraglich.
+Wenn keine Zone aktiv ist, erkennt die App die Stimmung aus dem Gesicht, gemessen relativ zum kalibrierten Ruhegesicht: Lächeln = Glücklich, zusammengezogene Brauen = Sauer, innere Brauen hoch + Mundwinkel runter = Enttäuscht, eine Braue hoch = Fraglich.
 
 ## Entwicklung
 

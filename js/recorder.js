@@ -20,10 +20,14 @@ export class Recorder {
     this.rec = null;
     this.chunks = [];
     this.startedAt = 0;
-    this.onState = () => {};
+    this.pausedAt = 0;
+    this.pausedTotal = 0;
+    this.onState = () => {};   // 'recording' | 'paused' | 'idle'
   }
 
   get active() { return !!this.rec && this.rec.state === 'recording'; }
+  get paused() { return !!this.rec && this.rec.state === 'paused'; }
+  get running() { return this.active || this.paused; }
 
   static supported() {
     return !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream && pickMime());
@@ -49,7 +53,34 @@ export class Recorder {
     this.rec.ondataavailable = (e) => { if (e.data && e.data.size) this.chunks.push(e.data); };
     this.rec.start();   // one blob at stop: Safari's MP4 chunks are not concatenable
     this.startedAt = performance.now();
+    this.pausedAt = 0; this.pausedTotal = 0;
     this.onState('recording');
+  }
+
+  pause() {
+    if (!this.active) return;
+    this.rec.pause();
+    this.pausedAt = performance.now();
+    this.onState('paused');
+  }
+
+  resume() {
+    if (!this.paused) return;
+    this.rec.resume();
+    this.pausedTotal += performance.now() - this.pausedAt;
+    this.pausedAt = 0;
+    this.onState('recording');
+  }
+
+  // Throw the current take away and start a fresh one
+  async restart() {
+    if (this.running) {
+      const rec = this.rec;
+      this.rec = null;
+      await new Promise((res) => { rec.onstop = res; rec.ondataavailable = null; rec.stop(); });
+      this.chunks = [];
+    }
+    await this.start();
   }
 
   // Resolves with the finished file
@@ -71,7 +102,12 @@ export class Recorder {
     });
   }
 
-  elapsed() { return this.active ? (performance.now() - this.startedAt) / 1000 : 0; }
+  // Recorded seconds, pauses excluded
+  elapsed() {
+    if (!this.running) return 0;
+    const pausedNow = this.paused ? performance.now() - this.pausedAt : 0;
+    return (performance.now() - this.startedAt - this.pausedTotal - pausedNow) / 1000;
+  }
 
   release() {
     if (this.mic) { this.mic.getTracks().forEach((t) => t.stop()); this.mic = null; }

@@ -14,6 +14,9 @@ const state = {
   autoMood: 'neutral',
   recording: false,
   cal: null,
+  prText: '',
+  prSpeed: 40,   // px/s
+  prSize: 26,    // px
 };
 
 const char = new Character($('#char-host'));
@@ -26,13 +29,39 @@ function setStatus(text, cls) {
   statusEl.className = 'status' + (cls ? ' ' + cls : '');
 }
 tracker.onStatus = setStatus;
-tracker.onCalibrated = (cal) => { state.cal = cal; save(); };
+tracker.onCalibrated = (cal) => {
+  state.cal = cal; save();
+  $('#cal-msg').textContent = 'Fertig';
+  $('#cal-bar').style.width = '100%';
+  setTimeout(hideCalibration, 700);
+};
+tracker.onCalProgress = (p, face) => {
+  const bar = $('#cal-bar');
+  bar.style.width = Math.round(p * 100) + '%';
+  bar.classList.toggle('lost', !face);
+  $('#cal-msg').textContent = !face ? 'Kein Gesicht erkannt. Gesicht in den Rahmen.'
+    : p < 0.05 ? 'Gesicht erkannt. Stillhalten …'
+    : 'Stillhalten … ' + Math.round(p * 100) + ' %';
+};
+function showCalibration() {
+  $('#cal-overlay').hidden = false;
+  $('#cam-wrap').className = 'cal-cam';
+  $('#cal-bar').style.width = '0%';
+  $('#cal-msg').textContent = 'Suche Gesicht …';
+  tracker.calibrate();
+}
+function hideCalibration() {
+  $('#cal-overlay').hidden = true;
+  if (camStarted) $('#cam-wrap').className = state.recording ? 'hidden-cam' : 'preview-cam';
+}
+$('#cal-cancel').addEventListener('click', () => { tracker.cancelCalibration(); hideCalibration(); setStatus('Kalibrierung abgebrochen', 'warn'); });
 
 // ---------- settings ----------
 function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       kit: state.kit, glasses: state.glasses, mirror: state.mirror, cal: state.cal,
+      prText: state.prText, prSpeed: state.prSpeed, prSize: state.prSize,
     }));
   } catch (e) { /* private mode */ }
 }
@@ -43,6 +72,9 @@ function load() {
     if (typeof s.glasses === 'boolean') state.glasses = s.glasses;
     if (typeof s.mirror === 'boolean') state.mirror = s.mirror;
     if (s.cal) { state.cal = s.cal; tracker.setCalibration(s.cal); }
+    if (typeof s.prText === 'string') state.prText = s.prText;
+    if (s.prSpeed) state.prSpeed = s.prSpeed;
+    if (s.prSize) state.prSize = s.prSize;
   } catch (e) { /* ignore */ }
 }
 load();
@@ -74,6 +106,42 @@ $('#tg-glasses').addEventListener('change', (e) => { state.glasses = e.target.ch
 $('#tg-mirror').addEventListener('change', (e) => { state.mirror = e.target.checked; save(); });
 $('#tg-demo').addEventListener('change', (e) => { state.demo = e.target.checked; });
 
+// ---------- teleprompter ----------
+const prInput = $('#pr-input'), prSpeedIn = $('#pr-speed-in'), prSizeIn = $('#pr-size-in');
+const prScroll = $('#prompter-scroll'), prTextEl = $('#prompter-text');
+let prRunning = false, prLast = 0, prAcc = 0;
+function syncPrompter() {
+  prInput.value = state.prText;
+  prSpeedIn.value = state.prSpeed; $('#pr-speed-lbl').textContent = state.prSpeed;
+  prSizeIn.value = state.prSize; $('#pr-size-lbl').textContent = state.prSize;
+  prTextEl.textContent = state.prText;
+  prTextEl.style.fontSize = state.prSize + 'px';
+  $('#pr-speed').textContent = (state.prSpeed / 40).toFixed(1) + '×';
+  $('#pr-play').classList.toggle('on', prRunning);
+  $('#pr-play').textContent = prRunning ? '❙❙' : '▶';
+}
+prInput.addEventListener('input', () => { state.prText = prInput.value; save(); syncPrompter(); });
+prSpeedIn.addEventListener('input', () => { state.prSpeed = +prSpeedIn.value; save(); syncPrompter(); });
+prSizeIn.addEventListener('input', () => { state.prSize = +prSizeIn.value; save(); syncPrompter(); });
+function prSetRunning(on) { prRunning = on; prLast = 0; syncPrompter(); }
+$('#pr-play').addEventListener('click', () => prSetRunning(!prRunning));
+$('#pr-top').addEventListener('click', () => { prScroll.scrollTop = 0; });
+$('#pr-slower').addEventListener('click', () => { state.prSpeed = Math.max(10, state.prSpeed - 5); save(); syncPrompter(); });
+$('#pr-faster').addEventListener('click', () => { state.prSpeed = Math.min(120, state.prSpeed + 5); save(); syncPrompter(); });
+// finger on the text pauses auto-scroll so manual scrolling wins
+prScroll.addEventListener('pointerdown', () => { if (prRunning) prSetRunning(false); });
+function prTick(now) {
+  if (!prRunning) return;
+  if (prLast) {
+    prAcc += (now - prLast) / 1000 * state.prSpeed;
+    const step = Math.floor(prAcc);
+    if (step) { prScroll.scrollTop += step; prAcc -= step; }
+    if (prScroll.scrollTop + prScroll.clientHeight >= prScroll.scrollHeight - 1) prSetRunning(false);
+  }
+  prLast = now;
+}
+syncPrompter();
+
 let camStarted = false;
 $('#btn-cam').addEventListener('click', async () => {
   if (camStarted) return;
@@ -86,7 +154,7 @@ $('#btn-cam').addEventListener('click', async () => {
     await tracker.load();
     camStarted = true;
     btn.textContent = 'Kamera läuft';
-    if (!state.cal) tracker.calibrate();
+    if (!state.cal || !state.cal.rest) showCalibration();
     else setStatus('Tracking läuft', 'ok');
   } catch (err) {
     console.error(err);
@@ -98,7 +166,7 @@ $('#btn-cam').addEventListener('click', async () => {
 
 $('#btn-cal').addEventListener('click', () => {
   if (!camStarted) { setStatus('Erst Kamera starten', 'warn'); return; }
-  tracker.calibrate();
+  showCalibration();
 });
 
 // ---------- recording mode ----------
@@ -117,6 +185,8 @@ function enterRecording() {
   $('#zones').hidden = false;
   $('#exit-zone').hidden = false;
   $('#rec-ui').hidden = !Recorder.supported();
+  $('#prompter').hidden = !state.prText.trim();
+  prScroll.scrollTop = 0; prSetRunning(false);
   syncZones();
   requestWakeLock();
 }
@@ -129,6 +199,8 @@ function exitRecording() {
   $('#zones').hidden = true;
   $('#exit-zone').hidden = true;
   $('#rec-ui').hidden = true;
+  $('#prompter').hidden = true;
+  prSetRunning(false);
   releaseWakeLock();
   syncUI();
 }
@@ -143,21 +215,54 @@ $('#zones').addEventListener('pointerdown', (e) => {
 });
 function syncZones() {
   document.querySelectorAll('#zones .zone').forEach((z) => z.classList.toggle('active', z.dataset.mood === state.manualMood));
+  syncAutoMood();
 }
 
 // ---------- in-app video recording (canvas + mic) ----------
 const recorder = new Recorder(char.canvas);
 const recBtn = $('#rec-toggle'), recTime = $('#rec-time');
+const recPause = $('#rec-pause'), recRestart = $('#rec-restart'), recHint = $('#rec-hint');
 recorder.onState = (st) => {
-  const on = st === 'recording';
-  recBtn.classList.toggle('on', on);
+  const on = st === 'recording', paused = st === 'paused', running = on || paused;
+  recBtn.classList.toggle('on', running);
+  recBtn.classList.toggle('paused', paused);
   recTime.classList.toggle('on', on);
-  if (!on) recTime.textContent = '00:00';
+  recTime.classList.toggle('paused', paused);
+  recPause.hidden = !running; recRestart.hidden = !running;
+  recPause.textContent = paused ? '▶' : '❙❙';
+  recHint.textContent = paused ? 'Pause' : '';
+  if (!running) recTime.textContent = '00:00';
+  // the prompter follows the take
+  if (on) prSetRunning(!!state.prText.trim());
+  else prSetRunning(false);
 };
+recPause.addEventListener('click', () => { if (recorder.paused) recorder.resume(); else recorder.pause(); });
+// restart = discard: needs a second tap within 2.5 s
+let restartArmed = 0;
+recRestart.addEventListener('click', async () => {
+  const now = performance.now();
+  if (now - restartArmed > 2500) {
+    restartArmed = now;
+    recRestart.classList.add('armed');
+    recHint.textContent = 'Nochmal tippen: verwerfen + neu';
+    setTimeout(() => { recRestart.classList.remove('armed'); if (recHint.textContent.startsWith('Nochmal')) recHint.textContent = ''; }, 2500);
+    return;
+  }
+  restartArmed = 0;
+  recRestart.classList.remove('armed');
+  recRestart.disabled = true;
+  try {
+    await recorder.restart();
+    prScroll.scrollTop = 0;
+    recHint.textContent = 'Neu gestartet';
+    setTimeout(() => { if (recHint.textContent === 'Neu gestartet') recHint.textContent = ''; }, 1500);
+  } catch (err) { console.error(err); setStatus('Aufnahme-Fehler: ' + (err && err.message ? err.message : err), 'err'); }
+  recRestart.disabled = false;
+});
 recBtn.addEventListener('click', async () => {
   recBtn.disabled = true;
   try {
-    if (!recorder.active) {
+    if (!recorder.running) {
       await recorder.start();
     } else {
       const file = await recorder.stop();
@@ -178,9 +283,9 @@ recBtn.addEventListener('click', async () => {
   }
   recBtn.disabled = false;
 });
-// Stop cleanly if the app goes to the background mid-recording
+// Backgrounded mid-take: pause instead of stop, nothing is lost and the user resumes
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && recorder.active) recBtn.click();
+  if (document.hidden && recorder.active) recorder.pause();
 });
 
 // Exit zone: double tap
@@ -203,15 +308,35 @@ function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 function smoothstep(a, b, v) { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
 
 // Auto mood from tracked face, with debounce
+// Values are relative to the calibrated resting face. Entering a mood needs the
+// full threshold, staying in it only 60 % of it (hysteresis), so a mood does
+// not flicker while talking.
 let autoCandidate = 'neutral', autoSince = 0;
+function moodScores(r) {
+  const browDown = (r.browDownL + r.browDownR) / 2;
+  return {
+    happy: r.smile,
+    angry: browDown * 0.8 + r.noseSneer * 0.4 - r.smile * 0.5,
+    sad: Math.max(r.browInnerUp * 0.6 + r.frown * 0.8 + r.mouthDown * 0.5, r.frown * 1.4) - r.smile * 0.5,
+    question: Math.abs(r.browOuterUpL - r.browOuterUpR) * 1.2 + Math.abs(r.browDownL - r.browDownR) * 0.8,
+  };
+}
+const MOOD_ON = { happy: 0.28, angry: 0.22, sad: 0.22, question: 0.22 };
 function detectMood(r, now) {
-  let m = 'neutral';
-  if (r.smile > 0.45) m = 'happy';
-  else if ((r.browDownL + r.browDownR) / 2 > 0.45 && r.smile < 0.2) m = 'angry';
-  else if (r.browInnerUp > 0.5 && r.frown > 0.25) m = 'sad';
-  else if (Math.abs(r.browOuterUpL - r.browOuterUpR) > 0.35) m = 'question';
+  const sc = moodScores(r);
+  let m = 'neutral', best = 0;
+  for (const k in sc) {
+    const th = MOOD_ON[k] * (state.autoMood === k ? 0.6 : 1);
+    if (sc[k] > th && sc[k] > best) { m = k; best = sc[k]; }
+  }
   if (m !== autoCandidate) { autoCandidate = m; autoSince = now; }
-  if (now - autoSince > 280) state.autoMood = autoCandidate;
+  const hold = m === 'neutral' ? 450 : 200;   // fall back to neutral slower than entering a mood
+  if (now - autoSince > hold && state.autoMood !== autoCandidate) { state.autoMood = autoCandidate; syncAutoMood(); }
+}
+const MOOD_LABEL = { neutral: 'Neutral', happy: 'Glücklich', sad: 'Enttäuscht', angry: 'Sauer', question: 'Fraglich' };
+function syncAutoMood() {
+  $('#seg-mood button[data-mood="auto"]').textContent = 'Auto: ' + MOOD_LABEL[state.autoMood];
+  document.querySelectorAll('#zones .zone').forEach((z) => z.classList.toggle('auto', !state.manualMood && z.dataset.mood === state.autoMood));
 }
 
 function demoRaw(t) {
@@ -223,7 +348,7 @@ function demoRaw(t) {
     lookIn: 0, lookOut: Math.max(0, Math.sin(s * 0.7)) * 0.5, lookUp: 0, lookDown: 0,
     browInnerUp: 0, browDownL: 0, browDownR: 0, browOuterUpL: 0, browOuterUpR: 0,
     jawOpen: Math.max(0, Math.sin(s * 9)) * 0.55 * (Math.sin(s * 1.3) > -0.3 ? 1 : 0),
-    smile: 0, frown: 0, pucker: 0,
+    smile: 0, frown: 0, mouthDown: 0, noseSneer: 0, pucker: 0,
   };
 }
 
@@ -297,7 +422,8 @@ function frame(now) {
   }
 
   char.update(cur);
-  if (recorder.active) {
+  prTick(now);
+  if (recorder.running) {
     const t = Math.floor(recorder.elapsed());
     recTime.textContent = String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
   }

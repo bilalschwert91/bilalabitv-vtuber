@@ -228,3 +228,123 @@ button.rec { background: #B3261E; border-color: #e04a41; }
   height: 100%;
   display: block;
 }
+
+/* Record side buttons (pause / restart) and hint */
+#rec-ui .side {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.7);
+  background: rgba(0,0,0,.45);
+  color: #fff;
+  font-size: 15px;
+  padding: 0;
+}
+#rec-ui .side[hidden] { display: none; }
+#rec-ui .side.armed { background: #E5342B; border-color: #fff; }
+#rec-toggle.paused { background: #FFD166; }
+#rec-time.paused { background: #FFD166; color: #000; }
+#rec-hint { font-size: 11px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); min-height: 14px; text-align: center; max-width: 90px; }
+
+/* Teleprompter: between the exit zone and the head; overlay only, never in the video */
+#prompter {
+  position: absolute;
+  left: 12px; right: 90px;
+  top: calc(env(safe-area-inset-top, 0px) + 14vh);
+  height: 26vh;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0,0,0,.55);
+  border-radius: 12px;
+  overflow: hidden;
+}
+#prompter[hidden] { display: none; }
+#prompter-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 12px;
+  mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+}
+#prompter-text {
+  color: #fff;
+  font-size: 26px;
+  line-height: 1.35;
+  font-weight: 600;
+  white-space: pre-wrap;
+  padding: 30% 0 60%;   /* start centred, run past the end */
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+}
+#prompter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(0,0,0,.35);
+  font-size: 12px;
+}
+#prompter-bar button { padding: 6px 10px; font-size: 14px; border-radius: 8px; min-width: 38px; }
+#prompter-bar #pr-play { margin-left: auto; }
+#prompter-bar #pr-play.on { background: rgba(255,255,255,.25); }
+
+/* Teleprompter settings in the panel */
+#pr-input {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+.pr-opts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 8px; font-size: 13px; }
+.pr-opts label { display: flex; align-items: center; gap: 6px; }
+.pr-opts input[type=range] { width: 110px; }
+
+/* Calibration guide */
+#cal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: rgba(6, 10, 18, .96);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 20px);
+}
+#cal-overlay[hidden] { display: none; }
+.cal-card { width: 100%; max-width: 420px; }
+.cal-title { font-weight: 800; font-size: 20px; margin-bottom: 8px; }
+.cal-steps { margin: 0 0 14px; padding-left: 20px; font-size: 15px; line-height: 1.5; }
+.cal-progress { height: 10px; border-radius: 5px; background: rgba(255,255,255,.12); overflow: hidden; }
+#cal-bar { height: 100%; width: 0; background: #7CF2A3; transition: width .1s linear; }
+#cal-bar.lost { background: #FF7B7B; }
+.cal-msg { margin: 10px 0 14px; font-size: 14px; color: var(--muted); min-height: 18px; }
+#cal-cancel { width: 100%; }
+/* big mirrored preview with a face guide while calibrating */
+#cam-wrap.cal-cam {
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 6vh);
+  width: 62vw;
+  height: 78vw;
+  max-width: 300px;
+  max-height: 380px;
+  transform: translateX(-50%);
+  opacity: 1;
+  border: 3px solid rgba(255,255,255,.7);
+  border-radius: 50% / 45%;
+  z-index: 21;
+}
+#cam-wrap.cal-cam #cam-badge { display: none; }
+#cam-wrap.cal-cam::after {
+  content: '';
+  position: absolute;
+  inset: 12% 18%;
+  border: 2px dashed rgba(124, 242, 163, .8);
+  border-radius: 50% / 45%;
+  pointer-events: none;
+}
+.zone.auto { color: rgba(124,242,163,.9); border-top-color: rgba(124,242,163,.7); }
