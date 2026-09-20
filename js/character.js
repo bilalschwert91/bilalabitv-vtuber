@@ -16,7 +16,7 @@ export const MOOD_LABELS = {
 
 const IMG_W = 768, IMG_H = 1376;   // base coordinate space (the original head artwork)
 const PAD = 170;                   // extra base px on each side so the arms fit
-const BODY_H = 2020;               // base px: the shirt artwork reaches down to the waist
+const BODY_H = 1620;               // base px: crop just above the navel
 const OUT_W = 1080;                // output canvas width; height follows the screen aspect
 const K = OUT_W / (IMG_W + 2 * PAD); // base px -> output px
 const SCALE = 1.25;                // internal oversampling
@@ -63,7 +63,7 @@ function neckPoly(kit) {
 const NECK = { home: neckPoly('home'), away: neckPoly('away'), third: neckPoly('third') };
 
 const G = {
-  pivot: { x: 384, y: 930 },          // base of the neck, rotation pivot
+  pivot: { x: 384, y: 826 },          // collar line: the neck stays put where it enters the shirt
   headDy: 0,                          // vertical offset of the head+neck unit
   headTop: [[0, 0], [768, 0], [768, 700], [0, 700]],
   bodyTop: 700,
@@ -257,10 +257,11 @@ export class Character {
     const dx = yaw * 9 + p.posX * 0.4;
     const dy = pitch * 7 + p.posY * 0.3 + Math.sin(p.time * 0.0022) * 1.5;
     const bodyTransform = () => {
-      ctx.translate(IMG_W / 2, BODY_H);
+      // pivot at the collar line so the neck and the collar never slide against each other
+      ctx.translate(G.pivot.x, G.pivot.y);
       ctx.scale(1, breathe);
-      ctx.rotate(roll * 0.4 * Math.PI / 180);
-      ctx.translate(-IMG_W / 2 + dx * 0.55, -BODY_H + dy * 0.4);
+      ctx.rotate(roll * 0.5 * Math.PI / 180);
+      ctx.translate(-G.pivot.x + dx, -G.pivot.y + dy * 0.4);
     };
 
     // 0. chest skin inside the collar opening, so head motion shows skin there, not green
