@@ -144,6 +144,14 @@ function alignToBase(keyed) {
   return out;
 }
 
+// Aligned canvases are padded sideways; head-space patches need the plain 768x1376 frame
+function unpad(aligned) {
+  const c = document.createElement('canvas');
+  c.width = IMG_W; c.height = IMG_H;
+  c.getContext('2d').drawImage(aligned, -PAD, 0);
+  return c;
+}
+
 // Copy an elliptic region of img into its own canvas with a feathered alpha edge
 function makePatch(img, e) {
   const c = document.createElement('canvas');
@@ -201,7 +209,7 @@ export class Character {
     await Promise.all(Object.keys(MOOD_OPEN).map(async (m) => {
       try {
         const im = await loadImage(MOOD_OPEN[m]);
-        this.mouthPatch[m] = makePatch(alignToBase(keyGreen(im)), G.mouth);
+        this.mouthPatch[m] = makePatch(unpad(alignToBase(keyGreen(im))), G.mouth);
       } catch (e) { /* optional */ }
     }));
     this.eyePatchL = makePatch(this.img.home_eyes_closed, G.eyeL);
