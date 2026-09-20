@@ -5,11 +5,31 @@ const MP_VERSION = '0.10';
 const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}`;
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
-// Landmark indices (MediaPipe 478-point mesh)
-// Blendshapes averaged during calibration as the resting face
-const REST_KEYS = ['browInnerUp', 'browDownLeft', 'browDownRight', 'browOuterUpLeft', 'browOuterUpRight',
+// Blendshapes that describe an expression; averaged during calibration
+export const EXPR_KEYS = ['browInnerUp', 'browDownLeft', 'browDownRight', 'browOuterUpLeft', 'browOuterUpRight',
   'mouthSmileLeft', 'mouthSmileRight', 'mouthFrownLeft', 'mouthFrownRight', 'mouthLowerDownLeft', 'mouthLowerDownRight',
-  'noseSneerLeft', 'noseSneerRight'];
+  'noseSneerLeft', 'noseSneerRight', 'mouthPressLeft', 'mouthPressRight', 'eyeSquintLeft', 'eyeSquintRight'];
+
+// Expression values relative to the resting face (never negative)
+export function exprFromBs(bs, rest) {
+  rest = rest || {};
+  const rel = (k) => Math.max(0, (bs[k] || 0) - (rest[k] || 0));
+  return {
+    browInnerUp: rel('browInnerUp'),
+    browDownL: rel('browDownLeft'),
+    browDownR: rel('browDownRight'),
+    browOuterUpL: rel('browOuterUpLeft'),
+    browOuterUpR: rel('browOuterUpRight'),
+    smile: (rel('mouthSmileLeft') + rel('mouthSmileRight')) / 2,
+    frown: (rel('mouthFrownLeft') + rel('mouthFrownRight')) / 2,
+    mouthDown: (rel('mouthLowerDownLeft') + rel('mouthLowerDownRight')) / 2,
+    mouthPress: (rel('mouthPressLeft') + rel('mouthPressRight')) / 2,
+    noseSneer: (rel('noseSneerLeft') + rel('noseSneerRight')) / 2,
+    squint: (rel('eyeSquintLeft') + rel('eyeSquintRight')) / 2,
+  };
+}
+
+// Landmark indices (MediaPipe 478-point mesh)
 const LM = { nose: 1, eyeLOuter: 33, eyeROuter: 263, faceL: 234, faceR: 454, chin: 152, forehead: 10 };
 
 export class Tracker {
@@ -20,10 +40,9 @@ export class Tracker {
     this.lastDetect = 0;
     this.face = false;
     this.raw = null;
-    // pose offsets plus the resting face (blendshapes) so moods are read relative to it
-    this.cal = { pitchRatio: 0.42, yawOff: 0, rest: null };
-    this.calSamples = [];
-    this.calibrated = false;
+    // pose offsets, the resting face and one blendshape average per calibrated mood
+    this.cal = { pitchRatio: 0.42, yawOff: 0, rest: null, moods: null };
+    this.capture = null;             // active sample window, see startCapture()
     this.onStatus = () => {};
     this.onCalProgress = () => {};   // (0..1, faceVisible)
   }
@@ -57,11 +76,21 @@ export class Tracker {
     await this.video.play();
   }
 
-  setCalibration(cal) { if (cal) { this.cal = { ...this.cal, ...cal }; this.calibrated = true; } }
+  setCalibration(cal) { if (cal) this.cal = { ...this.cal, ...cal }; }
 
-  // Start capturing samples; after ~1.2 s the neutral pose is stored.
-  calibrate() { this.calSamples = []; this.calibrated = false; this.onStatus('Kalibriere: gerade in Kamera schauen …'); this.onCalProgress(0, this.face); }
-  cancelCalibration() { if (!this.calibrated) { this.calSamples = []; this.calibrated = true; } }
+  // Collect `need` consecutive still-head samples. Resolves with the averages
+  // { yawRaw, pitchRatio, bs } or null when cancelled. A head jump or a lost face
+  // restarts the window; onCalProgress reports the fill level.
+  startCapture(need = 45) {
+    this.cancelCapture();
+    return new Promise((resolve) => {
+      this.capture = { need, samples: [], resolve };
+      this.onCalProgress(0, this.face);
+    });
+  }
+  cancelCapture() {
+    if (this.capture) { const c = this.capture; this.capture = null; c.resolve(null); }
+  }
 
   // Call every animation frame. Returns raw values or null (no face).
   tick(now) {
@@ -76,7 +105,7 @@ export class Tracker {
     if (!res || !res.faceLandmarks || !res.faceLandmarks.length) {
       this.face = false;
       this.raw = null;
-      if (!this.calibrated) { this.calSamples = []; this.onCalProgress(0, false); }
+      if (this.capture) { this.capture.samples = []; this.onCalProgress(0, false); }
       return null;
     }
     this.face = true;
@@ -97,27 +126,25 @@ export class Tracker {
     const pitchRatio = (nose.y - eyeMidY) / faceH;   // ~0.42 neutral, larger = head down
     const rollRaw = Math.atan2(er.y - el.y, er.x - el.x) * 180 / Math.PI;
 
-    if (!this.calibrated) {
+    if (this.capture) {
+      const c = this.capture;
       // Head must hold still: a jump resets the sample window
-      const last = this.calSamples[this.calSamples.length - 1];
-      if (last && (Math.abs(last.yawRaw - yawRaw) > 0.08 || Math.abs(last.pitchRatio - pitchRatio) > 0.03)) this.calSamples = [];
-      this.calSamples.push({ yawRaw, pitchRatio, bs: REST_KEYS.map((k) => bs[k] || 0) });
-      const need = 50;   // ~1.7 s at 30 fps
-      this.onCalProgress(Math.min(1, this.calSamples.length / need), true);
-      if (this.calSamples.length >= need) {
-        const n = this.calSamples.length;
-        this.cal.yawOff = this.calSamples.reduce((a, s) => a + s.yawRaw, 0) / n;
-        this.cal.pitchRatio = this.calSamples.reduce((a, s) => a + s.pitchRatio, 0) / n;
-        const rest = {};
-        REST_KEYS.forEach((k, i) => { rest[k] = this.calSamples.reduce((a, s) => a + s.bs[i], 0) / n; });
-        this.cal.rest = rest;
-        this.calibrated = true;
-        this.onStatus('Kalibriert', 'ok');
-        if (this.onCalibrated) this.onCalibrated({ ...this.cal });
+      const last = c.samples[c.samples.length - 1];
+      if (last && (Math.abs(last.yawRaw - yawRaw) > 0.1 || Math.abs(last.pitchRatio - pitchRatio) > 0.04)) c.samples = [];
+      c.samples.push({ yawRaw, pitchRatio, bs: EXPR_KEYS.map((k) => bs[k] || 0) });
+      this.onCalProgress(Math.min(1, c.samples.length / c.need), true);
+      if (c.samples.length >= c.need) {
+        const n = c.samples.length;
+        const avg = {};
+        EXPR_KEYS.forEach((k, i) => { avg[k] = c.samples.reduce((a, s) => a + s.bs[i], 0) / n; });
+        this.capture = null;
+        c.resolve({
+          yawRaw: c.samples.reduce((a, s) => a + s.yawRaw, 0) / n,
+          pitchRatio: c.samples.reduce((a, s) => a + s.pitchRatio, 0) / n,
+          bs: avg,
+        });
       }
     }
-    const rest = this.cal.rest || {};
-    const rel = (k) => Math.max(0, (bs[k] || 0) - (rest[k] || 0));
 
     this.raw = {
       yaw: (yawRaw - this.cal.yawOff) * 1.8,
@@ -133,18 +160,10 @@ export class Tracker {
       lookOut: ((bs.eyeLookOutLeft || 0) + (bs.eyeLookInRight || 0)) / 2,
       lookUp: ((bs.eyeLookUpLeft || 0) + (bs.eyeLookUpRight || 0)) / 2,
       lookDown: ((bs.eyeLookDownLeft || 0) + (bs.eyeLookDownRight || 0)) / 2,
-      // expression values are relative to the calibrated resting face
-      browInnerUp: rel('browInnerUp'),
-      browDownL: rel('browDownLeft'),
-      browDownR: rel('browDownRight'),
-      browOuterUpL: rel('browOuterUpLeft'),
-      browOuterUpR: rel('browOuterUpRight'),
       jawOpen: bs.jawOpen || 0,
-      smile: (rel('mouthSmileLeft') + rel('mouthSmileRight')) / 2,
-      frown: (rel('mouthFrownLeft') + rel('mouthFrownRight')) / 2,
-      mouthDown: (rel('mouthLowerDownLeft') + rel('mouthLowerDownRight')) / 2,
       pucker: Math.max(bs.mouthPucker || 0, bs.mouthFunnel || 0),
-      noseSneer: (rel('noseSneerLeft') + rel('noseSneerRight')) / 2,
+      // expression values relative to the calibrated resting face
+      ...exprFromBs(bs, this.cal.rest),
     };
     return this.raw;
   }

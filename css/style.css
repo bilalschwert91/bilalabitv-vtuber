@@ -248,9 +248,11 @@ button.rec { background: #B3261E; border-color: #e04a41; }
 /* Teleprompter: between the exit zone and the head; overlay only, never in the video */
 #prompter {
   position: absolute;
-  left: 12px; right: 90px;
+  left: 12px;
+  width: 78vw;
   top: calc(env(safe-area-inset-top, 0px) + 14vh);
   height: 26vh;
+  touch-action: none;
   z-index: 6;
   display: flex;
   flex-direction: column;
@@ -273,7 +275,7 @@ button.rec { background: #B3261E; border-color: #e04a41; }
   line-height: 1.35;
   font-weight: 600;
   white-space: pre-wrap;
-  padding: 30% 0 60%;   /* start centred, run past the end */
+  padding: 12% 0 60%;   /* short lead-in, run past the end */
   text-shadow: 0 1px 2px rgba(0,0,0,.8);
 }
 #prompter-bar {
@@ -283,7 +285,25 @@ button.rec { background: #B3261E; border-color: #e04a41; }
   padding: 6px 8px;
   background: rgba(0,0,0,.35);
   font-size: 12px;
+  cursor: grab;
 }
+#pr-drag { color: rgba(255,255,255,.7); font-size: 16px; letter-spacing: -3px; padding: 0 4px; }
+#prompter-grip {
+  height: 16px;
+  background: rgba(0,0,0,.35);
+  position: relative;
+  cursor: ns-resize;
+}
+#prompter-grip::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 6px;
+  width: 44px; height: 4px;
+  margin-left: -22px;
+  border-radius: 2px;
+  background: rgba(255,255,255,.55);
+}
+#prompter.dragging { opacity: .85; }
 #prompter-bar button { padding: 6px 10px; font-size: 14px; border-radius: 8px; min-width: 38px; }
 #prompter-bar #pr-play { margin-left: auto; }
 #prompter-bar #pr-play.on { background: rgba(255,255,255,.25); }
@@ -348,3 +368,17 @@ button.rec { background: #B3261E; border-color: #e04a41; }
   pointer-events: none;
 }
 .zone.auto { color: rgba(124,242,163,.9); border-top-color: rgba(124,242,163,.7); }
+
+/* Calibration steps */
+.cal-head { display: flex; justify-content: space-between; align-items: baseline; }
+.cal-step { font-size: 13px; color: var(--muted); }
+.cal-dots { display: flex; gap: 6px; margin: 8px 0 12px; }
+.cal-dots span { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.18); }
+.cal-dots span.done { background: #7CF2A3; }
+.cal-dots span.now { background: #fff; }
+.cal-text { font-size: 17px; font-weight: 600; line-height: 1.4; margin-bottom: 10px; }
+.cal-steps[hidden] { display: none; }
+#cal-skip[hidden] { display: none; }
+.cal-card .row { display: flex; gap: 8px; }
+.cal-card .row button { flex: 1; }
+#cal-bar.hold { background: #FFD166; }

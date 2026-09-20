@@ -32,12 +32,14 @@
     <div id="prompter" hidden>
       <div id="prompter-scroll"><div id="prompter-text"></div></div>
       <div id="prompter-bar">
+        <span id="pr-drag" aria-label="Verschieben">⋮⋮</span>
         <button id="pr-slower" aria-label="Langsamer">−</button>
         <span id="pr-speed">1.0×</span>
         <button id="pr-faster" aria-label="Schneller">+</button>
         <button id="pr-play" aria-label="Scrollen starten/pausieren">▶</button>
         <button id="pr-top" aria-label="Zum Anfang">⤒</button>
       </div>
+      <div id="prompter-grip" aria-label="Höhe ändern"></div>
     </div>
 
     <!-- Record controls (recording mode only, not part of the video) -->
@@ -62,16 +64,20 @@
   <!-- Calibration guide -->
   <div id="cal-overlay" hidden>
     <div class="cal-card">
-      <div class="cal-title">Kalibrierung</div>
-      <ol class="cal-steps">
+      <div class="cal-head"><div class="cal-title" id="cal-title">Kalibrierung</div><div class="cal-step" id="cal-step">1/5</div></div>
+      <div class="cal-dots" id="cal-dots"></div>
+      <div class="cal-text" id="cal-text"></div>
+      <ol class="cal-steps" id="cal-tips">
         <li>Handy gerade vor das Gesicht halten, Augenhöhe</li>
         <li>Direkt in die Kamera schauen, Kopf gerade</li>
-        <li>Entspanntes Gesicht: Mund zu, nicht lächeln, Brauen locker</li>
         <li>Stillhalten bis der Balken voll ist</li>
       </ol>
       <div class="cal-progress"><div id="cal-bar"></div></div>
       <div id="cal-msg" class="cal-msg">Suche Gesicht …</div>
-      <button id="cal-cancel">Abbrechen</button>
+      <div class="row">
+        <button id="cal-skip">Überspringen</button>
+        <button id="cal-cancel">Abbrechen</button>
+      </div>
     </div>
   </div>
 
@@ -113,8 +119,12 @@
       <textarea id="pr-input" rows="4" placeholder="Text hier einfügen. Läuft im Aufnahme-Modus oben über dem Kopf mit, ist nicht im Video."></textarea>
       <div class="pr-opts">
         <label>Tempo <input type="range" id="pr-speed-in" min="10" max="120" step="5" value="40"> <span id="pr-speed-lbl">40</span> px/s</label>
-        <label>Schrift <input type="range" id="pr-size-in" min="18" max="40" step="2" value="26"> <span id="pr-size-lbl">26</span> px</label>
+        <label>Schrift <input type="range" id="pr-size-in" min="18" max="48" step="2" value="26"> <span id="pr-size-lbl">26</span> px</label>
+        <label>Position <input type="range" id="pr-top-in" min="0" max="70" step="1" value="14"> <span id="pr-top-lbl">14</span> %</label>
+        <label>Höhe <input type="range" id="pr-height-in" min="10" max="80" step="1" value="26"> <span id="pr-height-lbl">26</span> %</label>
+        <label>Breite <input type="range" id="pr-width-in" min="40" max="100" step="1" value="78"> <span id="pr-width-lbl">78</span> %</label>
       </div>
+      <div class="hint">Im Aufnahme-Modus: Leiste unten am Teleprompter ziehen = verschieben, Griff am unteren Rand ziehen = Höhe.</div>
     </div>
 
     <div class="toggles">

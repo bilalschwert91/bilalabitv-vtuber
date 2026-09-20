@@ -1,5 +1,5 @@
 import { Character, MOODS, defaultParams } from './character.js';
-import { Tracker } from './tracker.js';
+import { Tracker, exprFromBs } from './tracker.js';
 import { Recorder, saveFile } from './recorder.js';
 
 const $ = (s) => document.querySelector(s);
@@ -17,6 +17,9 @@ const state = {
   prText: '',
   prSpeed: 40,   // px/s
   prSize: 26,    // px
+  prTop: 14,     // % of the screen height
+  prHeight: 26,  // %
+  prWidth: 78,   // % of the screen width
 };
 
 const char = new Character($('#char-host'));
@@ -29,32 +32,98 @@ function setStatus(text, cls) {
   statusEl.className = 'status' + (cls ? ' ' + cls : '');
 }
 tracker.onStatus = setStatus;
-tracker.onCalibrated = (cal) => {
-  state.cal = cal; save();
-  $('#cal-msg').textContent = 'Fertig';
-  $('#cal-bar').style.width = '100%';
-  setTimeout(hideCalibration, 700);
-};
+// ---------- calibration wizard ----------
+// Step 1 stores the pose offsets and the resting face. Steps 2-5 store one
+// blendshape average per mood, so detection knows what *this* face looks like
+// when it is happy, angry, sad or questioning.
+const CAL_STEPS = [
+  { key: 'rest', title: 'Ruhegesicht', text: 'Entspanntes Gesicht: Mund zu, nicht lächeln, Brauen locker. Gerade in die Kamera schauen.' },
+  { key: 'happy', title: 'Glücklich', text: 'Breit lächeln, gern mit Zähnen. Halten.' },
+  { key: 'angry', title: 'Sauer', text: 'Brauen zusammenziehen, böse gucken. Mund zu. Halten.' },
+  { key: 'sad', title: 'Enttäuscht', text: 'Mundwinkel nach unten, innere Brauen hoch, Hundeblick. Halten.' },
+  { key: 'question', title: 'Fraglich', text: 'Eine Augenbraue hochziehen, die andere unten lassen. Halten.' },
+];
+let calRun = null;   // { step, results, skip }
 tracker.onCalProgress = (p, face) => {
   const bar = $('#cal-bar');
   bar.style.width = Math.round(p * 100) + '%';
   bar.classList.toggle('lost', !face);
+  bar.classList.remove('hold');
   $('#cal-msg').textContent = !face ? 'Kein Gesicht erkannt. Gesicht in den Rahmen.'
     : p < 0.05 ? 'Gesicht erkannt. Stillhalten …'
     : 'Stillhalten … ' + Math.round(p * 100) + ' %';
 };
+function calRender(i, phase) {
+  const st = CAL_STEPS[i];
+  $('#cal-title').textContent = st.title;
+  $('#cal-step').textContent = (i + 1) + '/' + CAL_STEPS.length;
+  $('#cal-text').textContent = st.text;
+  $('#cal-tips').hidden = i !== 0;
+  $('#cal-skip').hidden = i === 0;
+  $('#cal-dots').innerHTML = CAL_STEPS.map((_, j) => '<span class="' + (j < i ? 'done' : j === i ? 'now' : '') + '"></span>').join('');
+  const bar = $('#cal-bar');
+  bar.className = phase === 'hold' ? 'hold' : '';
+  bar.style.width = phase === 'hold' ? '100%' : '0%';
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function runCalibration() {
+  const run = { results: {}, skip: null, cancelled: false };
+  calRun = run;
+  for (let i = 0; i < CAL_STEPS.length && !run.cancelled; i++) {
+    const st = CAL_STEPS[i];
+    calRender(i, 'pose');
+    // give the face a moment to form the expression before sampling
+    if (i > 0) {
+      for (let n = 3; n > 0 && !run.cancelled && run.skip !== st.key; n--) {
+        $('#cal-msg').textContent = 'Gesicht machen … ' + n;
+        await wait(700);
+      }
+    }
+    if (run.cancelled) break;
+    if (run.skip === st.key) { run.skip = null; continue; }
+    const res = await tracker.startCapture(i === 0 ? 50 : 40);
+    if (run.cancelled) break;
+    if (res === null) { run.skip = null; continue; }   // skipped
+    run.results[st.key] = res;
+    calRender(i, 'hold');
+    $('#cal-msg').textContent = 'Gespeichert';
+    await wait(500);
+  }
+  calRun = null;
+  if (run.cancelled) return;
+  const r = run.results.rest;
+  if (!r) { hideCalibration(); setStatus('Kalibrierung abgebrochen', 'warn'); return; }
+  const moods = {};
+  for (const k of ['happy', 'angry', 'sad', 'question']) if (run.results[k]) moods[k] = run.results[k].bs;
+  state.cal = { yawOff: r.yawRaw, pitchRatio: r.pitchRatio, rest: r.bs, moods };
+  tracker.setCalibration(state.cal);
+  applyMoodCalibration();
+  save();
+  $('#cal-msg').textContent = 'Fertig';
+  setStatus('Kalibriert', 'ok');
+  await wait(600);
+  hideCalibration();
+}
 function showCalibration() {
   $('#cal-overlay').hidden = false;
   $('#cam-wrap').className = 'cal-cam';
-  $('#cal-bar').style.width = '0%';
-  $('#cal-msg').textContent = 'Suche Gesicht …';
-  tracker.calibrate();
+  runCalibration();
 }
 function hideCalibration() {
   $('#cal-overlay').hidden = true;
   if (camStarted) $('#cam-wrap').className = state.recording ? 'hidden-cam' : 'preview-cam';
 }
-$('#cal-cancel').addEventListener('click', () => { tracker.cancelCalibration(); hideCalibration(); setStatus('Kalibrierung abgebrochen', 'warn'); });
+$('#cal-skip').addEventListener('click', () => {
+  if (!calRun) return;
+  calRun.skip = CAL_STEPS.find((st) => st.title === $('#cal-title').textContent).key;
+  tracker.cancelCapture();
+});
+$('#cal-cancel').addEventListener('click', () => {
+  if (calRun) calRun.cancelled = true;
+  tracker.cancelCapture();
+  hideCalibration();
+  setStatus('Kalibrierung abgebrochen', 'warn');
+});
 
 // ---------- settings ----------
 function save() {
@@ -62,6 +131,7 @@ function save() {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       kit: state.kit, glasses: state.glasses, mirror: state.mirror, cal: state.cal,
       prText: state.prText, prSpeed: state.prSpeed, prSize: state.prSize,
+      prTop: state.prTop, prHeight: state.prHeight, prWidth: state.prWidth,
     }));
   } catch (e) { /* private mode */ }
 }
@@ -75,6 +145,9 @@ function load() {
     if (typeof s.prText === 'string') state.prText = s.prText;
     if (s.prSpeed) state.prSpeed = s.prSpeed;
     if (s.prSize) state.prSize = s.prSize;
+    if (typeof s.prTop === 'number') state.prTop = s.prTop;
+    if (s.prHeight) state.prHeight = s.prHeight;
+    if (s.prWidth) state.prWidth = s.prWidth;
   } catch (e) { /* ignore */ }
 }
 load();
@@ -108,12 +181,19 @@ $('#tg-demo').addEventListener('change', (e) => { state.demo = e.target.checked;
 
 // ---------- teleprompter ----------
 const prInput = $('#pr-input'), prSpeedIn = $('#pr-speed-in'), prSizeIn = $('#pr-size-in');
-const prScroll = $('#prompter-scroll'), prTextEl = $('#prompter-text');
+const prTopIn = $('#pr-top-in'), prHeightIn = $('#pr-height-in'), prWidthIn = $('#pr-width-in');
+const prBox = $('#prompter'), prScroll = $('#prompter-scroll'), prTextEl = $('#prompter-text');
 let prRunning = false, prLast = 0, prAcc = 0;
 function syncPrompter() {
   prInput.value = state.prText;
   prSpeedIn.value = state.prSpeed; $('#pr-speed-lbl').textContent = state.prSpeed;
   prSizeIn.value = state.prSize; $('#pr-size-lbl').textContent = state.prSize;
+  prTopIn.value = state.prTop; $('#pr-top-lbl').textContent = state.prTop;
+  prHeightIn.value = state.prHeight; $('#pr-height-lbl').textContent = state.prHeight;
+  prWidthIn.value = state.prWidth; $('#pr-width-lbl').textContent = state.prWidth;
+  prBox.style.top = 'calc(env(safe-area-inset-top, 0px) + ' + state.prTop + 'vh)';
+  prBox.style.height = state.prHeight + 'vh';
+  prBox.style.width = state.prWidth + 'vw';
   prTextEl.textContent = state.prText;
   prTextEl.style.fontSize = state.prSize + 'px';
   $('#pr-speed').textContent = (state.prSpeed / 40).toFixed(1) + '×';
@@ -123,6 +203,30 @@ function syncPrompter() {
 prInput.addEventListener('input', () => { state.prText = prInput.value; save(); syncPrompter(); });
 prSpeedIn.addEventListener('input', () => { state.prSpeed = +prSpeedIn.value; save(); syncPrompter(); });
 prSizeIn.addEventListener('input', () => { state.prSize = +prSizeIn.value; save(); syncPrompter(); });
+prTopIn.addEventListener('input', () => { state.prTop = +prTopIn.value; save(); syncPrompter(); });
+prHeightIn.addEventListener('input', () => { state.prHeight = +prHeightIn.value; save(); syncPrompter(); });
+prWidthIn.addEventListener('input', () => { state.prWidth = +prWidthIn.value; save(); syncPrompter(); });
+// Drag the bar to move the box, drag the grip to change its height (recording mode)
+function prDrag(el, apply) {
+  let startY = 0, base = 0, active = false;
+  el.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    startY = e.clientY; base = apply(null); active = true;
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+    prBox.classList.add('dragging');
+    e.preventDefault();
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!active) return;
+    apply(base + (e.clientY - startY) / window.innerHeight * 100);
+    syncPrompter();
+  });
+  const end = () => { if (!active) return; active = false; prBox.classList.remove('dragging'); save(); };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
+prDrag($('#prompter-bar'), (v) => { if (v !== null) state.prTop = Math.round(clamp(v, 0, 85)); return state.prTop; });
+prDrag($('#prompter-grip'), (v) => { if (v !== null) state.prHeight = Math.round(clamp(v, 10, 90)); return state.prHeight; });
 function prSetRunning(on) { prRunning = on; prLast = 0; syncPrompter(); }
 $('#pr-play').addEventListener('click', () => prSetRunning(!prRunning));
 $('#pr-top').addEventListener('click', () => { prScroll.scrollTop = 0; });
@@ -288,9 +392,12 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && recorder.active) recorder.pause();
 });
 
-// Exit zone: double tap
+// Exit: double tap on the top edge or anywhere on the plain stage (not on controls)
 let lastTap = 0;
-$('#exit-zone').addEventListener('pointerdown', () => {
+$('#stage').addEventListener('pointerdown', (e) => {
+  if (!state.recording) return;
+  const plain = e.target.id === 'exit-zone' || e.target.id === 'stage' || e.target.closest('#char-host');
+  if (!plain) { lastTap = 0; return; }
   const now = performance.now();
   if (now - lastTap < 350) exitRecording();
   lastTap = now;
@@ -316,21 +423,40 @@ function moodScores(r) {
   const browDown = (r.browDownL + r.browDownR) / 2;
   return {
     happy: r.smile,
-    angry: browDown * 0.8 + r.noseSneer * 0.4 - r.smile * 0.5,
-    sad: Math.max(r.browInnerUp * 0.6 + r.frown * 0.8 + r.mouthDown * 0.5, r.frown * 1.4) - r.smile * 0.5,
+    angry: browDown * 0.8 + r.noseSneer * 0.4 + r.mouthPress * 0.3 + r.squint * 0.2 - r.smile * 0.6,
+    sad: Math.max(r.browInnerUp * 0.6 + r.frown * 0.8 + r.mouthDown * 0.5, r.frown * 1.4) - r.smile * 0.6,
     question: Math.abs(r.browOuterUpL - r.browOuterUpR) * 1.2 + Math.abs(r.browDownL - r.browDownR) * 0.8,
   };
 }
-const MOOD_ON = { happy: 0.28, angry: 0.22, sad: 0.22, question: 0.22 };
+// Entry threshold per mood. Default = generic; after calibration = half of the
+// score this user produced while making the face (only when that was clearly
+// above the resting face, otherwise the generic value stays).
+const MOOD_DEFAULT = { happy: 0.28, angry: 0.24, sad: 0.24, question: 0.24 };
+const moodOn = { ...MOOD_DEFAULT };
+function applyMoodCalibration() {
+  Object.assign(moodOn, MOOD_DEFAULT);
+  const cal = state.cal;
+  if (!cal || !cal.rest || !cal.moods) return;
+  for (const k in cal.moods) {
+    const ref = moodScores(exprFromBs(cal.moods[k], cal.rest))[k];
+    if (ref > 0.12) moodOn[k] = clamp(ref * 0.5, 0.08, 0.6);
+  }
+}
+applyMoodCalibration();   // from the stored calibration, if any
+// Scores are smoothed (EMA) before thresholding, so one odd frame cannot flip the mood
+const moodSmooth = { happy: 0, angry: 0, sad: 0, question: 0 };
 function detectMood(r, now) {
   const sc = moodScores(r);
   let m = 'neutral', best = 0;
   for (const k in sc) {
-    const th = MOOD_ON[k] * (state.autoMood === k ? 0.6 : 1);
-    if (sc[k] > th && sc[k] > best) { m = k; best = sc[k]; }
+    moodSmooth[k] = lerp(moodSmooth[k], sc[k], 0.18);
+    const th = moodOn[k] * (state.autoMood === k ? 0.55 : 1);   // hysteresis: easier to stay than to enter
+    const norm = moodSmooth[k] / moodOn[k];
+    if (moodSmooth[k] > th && norm > best) { m = k; best = norm; }
   }
   if (m !== autoCandidate) { autoCandidate = m; autoSince = now; }
-  const hold = m === 'neutral' ? 450 : 200;   // fall back to neutral slower than entering a mood
+  // candidate must persist: 300 ms into a mood, 700 ms back to neutral
+  const hold = m === 'neutral' ? 700 : 300;
   if (now - autoSince > hold && state.autoMood !== autoCandidate) { state.autoMood = autoCandidate; syncAutoMood(); }
 }
 const MOOD_LABEL = { neutral: 'Neutral', happy: 'Glücklich', sad: 'Enttäuscht', angry: 'Sauer', question: 'Fraglich' };
@@ -348,7 +474,7 @@ function demoRaw(t) {
     lookIn: 0, lookOut: Math.max(0, Math.sin(s * 0.7)) * 0.5, lookUp: 0, lookDown: 0,
     browInnerUp: 0, browDownL: 0, browDownR: 0, browOuterUpL: 0, browOuterUpR: 0,
     jawOpen: Math.max(0, Math.sin(s * 9)) * 0.55 * (Math.sin(s * 1.3) > -0.3 ? 1 : 0),
-    smile: 0, frown: 0, mouthDown: 0, noseSneer: 0, pucker: 0,
+    smile: 0, frown: 0, mouthDown: 0, mouthPress: 0, noseSneer: 0, squint: 0, pucker: 0,
   };
 }
 
@@ -435,3 +561,6 @@ setStatus('Lade Bilder …');
 char.load((n, total) => setStatus(`Lade Bilder ${n}/${total}`)).then(() => {
   setStatus(camStarted ? 'Tracking läuft' : 'Bereit. Kamera starten.', camStarted ? 'ok' : '');
 }).catch((err) => setStatus(err.message, 'err'));
+
+// debug handle (console): window.__vt.state, .tracker, .showCalibration()
+window.__vt = { state, tracker, showCalibration };
