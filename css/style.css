@@ -412,3 +412,5 @@ button.rec { background: #B3261E; border-color: #e04a41; }
 }
 #btn-menu[hidden] { display: none; }
 #debug { top: calc(env(safe-area-inset-top, 0px) + 10px); }
+#btn-log { padding: 6px 10px; font-size: 12px; }
+#btn-log[hidden] { display: none; }

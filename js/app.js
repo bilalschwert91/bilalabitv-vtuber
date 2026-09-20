@@ -178,7 +178,14 @@ $('#seg-mood').addEventListener('click', (e) => {
 $('#tg-glasses').addEventListener('change', (e) => { state.glasses = e.target.checked; save(); syncUI(); });
 $('#tg-mirror').addEventListener('change', (e) => { state.mirror = e.target.checked; save(); });
 $('#tg-demo').addEventListener('change', (e) => { state.demo = e.target.checked; });
-$('#tg-debug').addEventListener('change', (e) => { state.debug = e.target.checked; $('#debug').hidden = !state.debug; });
+$('#tg-debug').addEventListener('change', (e) => { state.debug = e.target.checked; $('#debug').hidden = !state.debug; $('#btn-log').hidden = !state.debug; });
+$('#btn-log').addEventListener('click', async () => {
+  const text = 't lip jaw mund blinkL blinkR augeL augeR\n' + dbgLog.join('\n');
+  try {
+    if (navigator.share) await navigator.share({ title: 'BilalAbiTV Messwerte', text });
+    else { await navigator.clipboard.writeText(text); setStatus('Log in Zwischenablage', 'ok'); }
+  } catch (e) { /* cancelled */ }
+});
 
 // ---------- teleprompter ----------
 const prInput = $('#pr-input'), prSpeedIn = $('#pr-speed-in'), prSizeIn = $('#pr-size-in');
@@ -487,6 +494,7 @@ function demoRaw(t) {
 }
 
 let dbgLast = 0, fps = 0, fpsLast = 0;
+const dbgLog = [];
 function frame(now) {
   requestAnimationFrame(frame);
   if (fpsLast) fps = lerp(fps, 1000 / Math.max(1, now - fpsLast), 0.1);
@@ -565,6 +573,11 @@ function frame(now) {
   char.update(cur);
   if (state.debug && (now - dbgLast) > 100) {
     dbgLast = now;
+    // ring buffer of the last 20 s, shareable via the log button
+    if (raw) {
+      dbgLog.push([Math.round(now / 100) / 10, raw.lipOpen, raw.jawOpen, cur.mouthOpen, raw.blinkL, raw.blinkR, cur.eyeL, cur.eyeR].map((v) => (+v).toFixed(2)).join(' '));
+      if (dbgLog.length > 200) dbgLog.shift();
+    }
     const f = (v) => (v === undefined ? '-' : v.toFixed(2));
     $('#debug').textContent = raw
       ? 'lip ' + f(raw.lipOpen) + '  jaw ' + f(raw.jawOpen) + '  mund ' + f(cur.mouthOpen) +

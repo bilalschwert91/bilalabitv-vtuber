@@ -68,7 +68,18 @@ export class Tracker {
     this.onStatus('Tracking bereit');
   }
 
+  // Development: ?video=path.mp4 replays a recorded selfie instead of the camera,
+  // so tracking can be tuned on a desktop against the same face every time.
   async startCamera() {
+    const test = new URLSearchParams(location.search).get('video');
+    if (test) {
+      this.video.srcObject = null;
+      this.video.src = test;
+      this.video.loop = true;
+      this.video.muted = true;
+      await this.video.play();
+      return;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
       audio: false,
