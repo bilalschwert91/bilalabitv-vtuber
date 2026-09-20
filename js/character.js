@@ -200,6 +200,10 @@ export class Character {
     }));
     const px = this.img.home_neutral.getContext('2d').getImageData(384, 905, 1, 1).data;
     this.neckColor = `rgb(${px[0]},${px[1]},${px[2]})`;
+    // optional custom logo
+    for (const src of ['img/logo.png', 'img/logo.jpg', 'img/logo.webp']) {
+      try { const im = await loadImage(src); this.logo = keyGreen(im); break; } catch (e) { /* optional */ }
+    }
     this.body = {};
     await Promise.all(Object.keys(BODY_FILES).map(async (k) => {
       const im = await loadImage(BODY_FILES[k]);
@@ -341,12 +345,25 @@ export class Character {
       cv.width = IMG_W * S; cv.height = 300 * S;
       const dc = cv.getContext('2d');
       dc.setTransform(S, 0, 0, S, 0, -1000 * S);
-      this.drawCrest(dc, kit);
+      if (this.logo) this.drawLogoImage(dc, kit); else this.drawCrest(dc, kit);
       if (kit === 'home') this.drawSponsor(dc);
       this.decals[kit] = { cv, S };
     }
     const { cv, S } = this.decals[kit];
     ctx.drawImage(cv, 0, 1000, IMG_W, 300);
+  }
+
+  // Optional img/logo.* (green or transparent background): drawn instead of the vector crest,
+  // fitted into the crest box, monochrome silver on the third kit
+  drawLogoImage(ctx, kit) {
+    const { x, y, w, h } = G.crest[kit] || G.crest.home;
+    const im = this.logo;
+    const s = Math.min((w * 1.35) / im.width, (h * 1.35) / im.height);
+    const dw = im.width * s, dh = im.height * s;
+    ctx.save();
+    if (kit === 'third') ctx.filter = 'grayscale(1) brightness(1.15)';
+    ctx.drawImage(im, x - dw / 2, y - dh / 2, dw, dh);
+    ctx.restore();
   }
 
   drawCrest(ctx, kit) {
