@@ -10,6 +10,7 @@ Der Charakter besteht aus neun Bildern in `img/` (mit Gemini erzeugt): neutral, 
 - Fünf Stimmungen: Neutral, Glücklich, Enttäuscht, Sauer, Fraglich
 - Drei Trikots (Saison 2026/27): Heim, Auswärts, Third
 - Sonnenbrille ein/aus
+- Aufnahme direkt in der App: Charakter + Mikrofon als MP4, „Video sichern“ legt es in Fotos ab
 - Chroma-Grün (`#00B140`) als Hintergrund für CapCut-Chroma-Key
 - Einstellungen und Kalibrierung werden im Browser gespeichert
 
@@ -20,10 +21,13 @@ Der Charakter besteht aus neun Bildern in `img/` (mit Gemini erzeugt): neutral, 
 3. „Kamera starten“ tippen, Kamerazugriff erlauben. Beim ersten Start kalibriert die App automatisch: 1–2 Sekunden gerade in die Kamera schauen.
 4. Trikot, Sonnenbrille und Stimmung im Menü wählen.
 5. „Aufnahme-Modus“ tippen. Menü und Kamera-Vorschau verschwinden.
-6. Bildschirmaufnahme über das Kontrollzentrum starten. Das Aufnahme-Symbol lang drücken und das Mikrofon einschalten, sonst ist kein Ton auf der Aufnahme.
-7. Sprechen. Stimmung während der Aufnahme über fünf unsichtbare Zonen am unteren Bildschirmrand wechseln (links nach rechts: Neutral, Glücklich, Enttäuscht, Sauer, Fraglich). Aktive Zone erneut tippen schaltet zurück auf Auto.
-8. Doppeltipp am oberen Bildschirmrand führt zurück ins Menü.
-9. Video in CapCut laden: Chroma-Key auf Grün, News-Bild als Hintergrund, Text „BilalAbiTV“, Untertitel.
+6. Roten Knopf rechts tippen. Beim ersten Mal Mikrofon erlauben. Der Zähler läuft.
+7. Sprechen. Stimmung über die fünf Zonen am unteren Bildschirmrand wechseln (Neutral, Glücklich, Enttäuscht, Sauer, Fraglich). Aktive Zone erneut tippen schaltet zurück auf Auto. Knöpfe und Zonen sind nicht im Video, aufgenommen wird nur der Charakter.
+8. Roten Knopf erneut tippen. Im Teilen-Menü „Video sichern“ wählen, das MP4 liegt dann in Fotos.
+9. Doppeltipp am oberen Bildschirmrand führt zurück ins Menü.
+10. Video in CapCut laden: Chroma-Key auf Grün, News-Bild als Hintergrund, Text „BilalAbiTV“, Untertitel.
+
+Alternative ohne App-Aufnahme: Bildschirmaufnahme über das Kontrollzentrum, Mikrofon einschalten (Symbol lang drücken). Dann sind Knöpfe und Zonen aber mit im Video.
 
 ## Stimmungs-Automatik
 
@@ -47,6 +51,7 @@ Die Kamera funktioniert nur über HTTPS oder `localhost`.
 - `img/` – Charakter-Bilder: Kopf-Varianten (768x1376) und Trikots mit Armen (`*_body.jpg`, beliebige Auflösung, werden am Kopf ausgerichtet)
 - `js/tracker.js` – MediaPipe-Tracking und Kalibrierung
 - `js/app.js` – Steuerung, Glättung, Aufnahme-Modus
+- `js/recorder.js` – MediaRecorder: Canvas + Mikrofon zu MP4, Speichern über Teilen-Menü
 
 ## Veröffentlichung (GitHub Pages)
 

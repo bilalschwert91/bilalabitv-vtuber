@@ -69,8 +69,8 @@ const G = {
   headTop: [[0, 0], [768, 0], [768, 700], [0, 700]],
   bodyTop: 700,
   mouth: { x: 384, y: 690, rx: 74, ry: 46 },
-  eyeL: { x: 298, y: 515, rx: 74, ry: 46 },
-  eyeR: { x: 468, y: 515, rx: 74, ry: 46 },
+  eyeL: { x: 298, y: 515, rx: 82, ry: 42, inner: 0.72 },   // hard core covers the whole eye
+  eyeR: { x: 468, y: 515, rx: 82, ry: 42, inner: 0.72 },
   earL: { x: 172, y: 520 }, earR: { x: 598, y: 520 },
   sponsor: { x: 384, y: 1257, w: 400, h: 140 },
   crest: {
@@ -182,7 +182,7 @@ function makePatch(img, e) {
   ctx.save();
   ctx.translate(e.x, e.y);
   ctx.scale(1, e.ry / e.rx);
-  const grad = ctx.createRadialGradient(0, 0, e.rx * 0.5, 0, 0, e.rx);
+  const grad = ctx.createRadialGradient(0, 0, e.rx * (e.inner || 0.5), 0, 0, e.rx);
   grad.addColorStop(0, 'rgba(0,0,0,1)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = grad;

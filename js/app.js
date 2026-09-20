@@ -1,5 +1,6 @@
 import { Character, MOODS, defaultParams } from './character.js';
 import { Tracker } from './tracker.js';
+import { Recorder, saveFile } from './recorder.js';
 
 const $ = (s) => document.querySelector(s);
 const STORE_KEY = 'bilalabitv-settings';
@@ -115,6 +116,8 @@ function enterRecording() {
   $('#cam-wrap').className = 'hidden-cam';
   $('#zones').hidden = false;
   $('#exit-zone').hidden = false;
+  $('#rec-ui').hidden = !Recorder.supported();
+  syncZones();
   requestWakeLock();
 }
 function exitRecording() {
@@ -125,6 +128,7 @@ function exitRecording() {
   if (camStarted) $('#cam-wrap').className = 'preview-cam';
   $('#zones').hidden = true;
   $('#exit-zone').hidden = true;
+  $('#rec-ui').hidden = true;
   releaseWakeLock();
   syncUI();
 }
@@ -135,6 +139,48 @@ $('#zones').addEventListener('pointerdown', (e) => {
   const z = e.target.closest('.zone'); if (!z) return;
   const m = z.dataset.mood;
   state.manualMood = state.manualMood === m ? null : m;
+  syncZones();
+});
+function syncZones() {
+  document.querySelectorAll('#zones .zone').forEach((z) => z.classList.toggle('active', z.dataset.mood === state.manualMood));
+}
+
+// ---------- in-app video recording (canvas + mic) ----------
+const recorder = new Recorder(char.canvas);
+const recBtn = $('#rec-toggle'), recTime = $('#rec-time');
+recorder.onState = (st) => {
+  const on = st === 'recording';
+  recBtn.classList.toggle('on', on);
+  recTime.classList.toggle('on', on);
+  if (!on) recTime.textContent = '00:00';
+};
+recBtn.addEventListener('click', async () => {
+  recBtn.disabled = true;
+  try {
+    if (!recorder.active) {
+      await recorder.start();
+    } else {
+      const file = await recorder.stop();
+      if (file) {
+        const how = await saveFile(file);
+        const mb = Math.max(1, Math.round(file.size / 1048576));
+        const msg = how === 'cancelled' ? 'Verworfen' : 'Gespeichert · ' + mb + ' MB';
+        setStatus(how === 'cancelled' ? 'Video verworfen' : 'Video gespeichert (' + mb + ' MB)', how === 'cancelled' ? 'warn' : 'ok');
+        recTime.textContent = msg;
+        setTimeout(() => { if (!recorder.active) recTime.textContent = '00:00'; }, 4000);
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+    setStatus(denied ? 'Mikrofon verweigert. Einstellungen > Safari > Mikrofon > Erlauben' : 'Aufnahme-Fehler: ' + (err && err.message ? err.message : err), 'err');
+    exitRecording();
+  }
+  recBtn.disabled = false;
+});
+// Stop cleanly if the app goes to the background mid-recording
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && recorder.active) recBtn.click();
 });
 
 // Exit zone: double tap
@@ -154,6 +200,7 @@ let faceLostAt = null;
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function smoothstep(a, b, v) { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
 
 // Auto mood from tracked face, with debounce
 let autoCandidate = 'neutral', autoSince = 0;
@@ -198,8 +245,16 @@ function frame(now) {
     target.roll = clamp(raw.roll * sign * -1, -25, 25);
     target.posX = clamp(raw.posX * sign * -1, -1, 1) * 30;
     target.posY = clamp(raw.posY, -1, 1) * 20;
-    target.eyeL = 1 - clamp(raw.blinkL * 1.15, 0, 1) - raw.squintL * 0.25;
-    target.eyeR = 1 - clamp(raw.blinkR * 1.15, 0, 1) - raw.squintR * 0.25;
+    // Wink: the open eye usually reports a partial blink too, so pull it down by the
+    // difference. A real blink has both values close together and is unaffected.
+    const bL = clamp(raw.blinkL - Math.max(0, raw.blinkR - raw.blinkL) * 0.7, 0, 1);
+    const bR = clamp(raw.blinkR - Math.max(0, raw.blinkL - raw.blinkR) * 0.7, 0, 1);
+    // Snap: below 0.3 fully open, above 0.6 fully closed, no half-transparent eyes
+    const closeL = smoothstep(0.3, 0.6, bL) + raw.squintL * 0.15;
+    const closeR = smoothstep(0.3, 0.6, bR) + raw.squintR * 0.15;
+    // MediaPipe "Left" = the user's left eye. Mirrored, that is screen-left = image eyeL.
+    target.eyeL = 1 - (state.mirror ? closeL : closeR);
+    target.eyeR = 1 - (state.mirror ? closeR : closeL);
     target.gazeX = (raw.lookOut - raw.lookIn) * sign * -1;
     target.gazeY = raw.lookDown - raw.lookUp;
     target.browL = -(raw.browInnerUp * 0.6 + raw.browOuterUpL) * 22 + raw.browDownL * 14;
@@ -242,6 +297,10 @@ function frame(now) {
   }
 
   char.update(cur);
+  if (recorder.active) {
+    const t = Math.floor(recorder.elapsed());
+    recTime.textContent = String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+  }
 }
 window.vt = { char, state, cur };
 requestAnimationFrame(frame);

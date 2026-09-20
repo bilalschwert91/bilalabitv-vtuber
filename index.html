@@ -19,12 +19,19 @@
     <div id="char-host"></div>
 
     <!-- Invisible mood tap zones, bottom edge (recording mode only) -->
+    <!-- Mood tap zones, bottom edge (recording mode only). Not part of the video: only the canvas is recorded. -->
     <div id="zones" hidden>
-      <div class="zone" data-mood="neutral"></div>
-      <div class="zone" data-mood="happy"></div>
-      <div class="zone" data-mood="sad"></div>
-      <div class="zone" data-mood="angry"></div>
-      <div class="zone" data-mood="question"></div>
+      <div class="zone" data-mood="neutral">Neutral</div>
+      <div class="zone" data-mood="happy">Glücklich</div>
+      <div class="zone" data-mood="sad">Enttäuscht</div>
+      <div class="zone" data-mood="angry">Sauer</div>
+      <div class="zone" data-mood="question">Fraglich</div>
+    </div>
+
+    <!-- Record button + timer (recording mode only) -->
+    <div id="rec-ui" hidden>
+      <button id="rec-toggle" aria-label="Aufnahme starten/stoppen"></button>
+      <div id="rec-time">00:00</div>
     </div>
 
     <!-- Invisible exit zone, top edge (double tap) -->
@@ -81,9 +88,8 @@
     </div>
 
     <div class="hint">
-      Aufnahme-Modus: UI weg, Zonen unten = Stimmung (Neutral · Glücklich · Enttäuscht · Sauer · Fraglich).
-      Aktive Zone nochmal tippen = Auto. Doppeltipp oben = zurück ins Menü.
-      Bildschirmaufnahme über Kontrollzentrum, Mikro einschalten (Symbol lang drücken).
+      Aufnahme-Modus: roter Knopf = Aufnahme mit Mikro starten/stoppen, danach „Video sichern“ in Fotos.
+      Zonen unten = Stimmung, aktive Zone nochmal tippen = Auto. Doppeltipp oben = zurück ins Menü.
     </div>
   </div>
 
