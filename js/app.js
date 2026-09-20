@@ -429,6 +429,41 @@ function lerp(a, b, t) { return a + (b - a) * t; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 function smoothstep(a, b, v) { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
 
+// Blink state machine, per eye. Cartoon eyes are open or closed, nothing in between.
+// - close needs the blink value (relative to the resting eyes) above 0.32 (+ up to
+//   0.2 while smiling: squinting
+//   from a smile is not a blink) and both eyes closing together; a single eye
+//   must be clearly shut for 220 ms with the other open before it counts as a wink
+// - once closed, stays at least 100 ms, opens when the value drops below 0.2
+// - after opening, 200 ms refractory so a bouncing value cannot re-trigger
+const eye = { L: { closed: false, since: 0, opened: 0, pending: 0 }, R: { closed: false, since: 0, opened: 0, pending: 0 } };
+function eyeStates(r, now) {
+  const th = 0.32 + clamp(r.smile, 0, 1) * 0.2;
+  // wink: the open eye reports a partial blink too, pull it down by the difference
+  const bL = r.blinkL - Math.max(0, r.blinkR - r.blinkL) * 0.7;
+  const bR = r.blinkR - Math.max(0, r.blinkL - r.blinkR) * 0.7;
+  const hi = { L: bL > th, R: bR > th };
+  const lo = { L: bL < 0.2, R: bR < 0.2 };
+  // asymmetric blink: one eye over the threshold, the other at least 60 % of it
+  const both = (hi.L && bR > th * 0.6) || (hi.R && bL > th * 0.6);
+  const val = { L: bL, R: bR }, other = { L: bR, R: bL };
+  for (const k of ['L', 'R']) {
+    const e = eye[k];
+    if (!e.closed) {
+      if (both && now - e.opened > 200) { e.closed = true; e.since = now; e.pending = 0; }
+      else if (hi[k] && val[k] > 0.5 + clamp(r.smile, 0, 1) * 0.2 && other[k] < 0.15 && now - e.opened > 200) {
+        // wink: one eye clearly shut, the other clearly open, held 220 ms
+        if (!e.pending) e.pending = now;
+        else if (now - e.pending > 220) { e.closed = true; e.since = now; e.pending = 0; }
+      } else e.pending = 0;
+    } else if (lo[k] && now - e.since > 100) { e.closed = false; e.opened = now; }
+    // drooping lids (reading the screen below the camera) are not a blink: after
+    // 450 ms reopen unless the eye is really shut
+    else if (now - e.since > 450 && val[k] < 0.5) { e.closed = false; e.opened = now; }
+  }
+  return [eye.L.closed ? 1 : 0, eye.R.closed ? 1 : 0];
+}
+
 // Auto mood from tracked face, with debounce
 // Values are relative to the calibrated resting face. Entering a mood needs the
 // full threshold, staying in it only 60 % of it (hysteresis), so a mood does
@@ -495,8 +530,8 @@ function demoRaw(t) {
 
 let dbgLast = 0, fps = 0, fpsLast = 0;
 const dbgLog = [];
-function frame(now) {
-  requestAnimationFrame(frame);
+function frame(now, manual) {
+  if (!manual) requestAnimationFrame(frame);
   if (fpsLast) fps = lerp(fps, 1000 / Math.max(1, now - fpsLast), 0.1);
   fpsLast = now;
   cur.time = now;
@@ -515,14 +550,7 @@ function frame(now) {
     target.roll = clamp(raw.roll * sign * -1, -25, 25);
     target.posX = clamp(raw.posX * sign * -1, -1, 1) * 30;
     target.posY = clamp(raw.posY, -1, 1) * 20;
-    // Wink: the open eye usually reports a partial blink too, so pull it down by the
-    // difference. A real blink has both values close together and is unaffected.
-    const bL = clamp(raw.blinkL - Math.max(0, raw.blinkR - raw.blinkL) * 0.7, 0, 1);
-    const bR = clamp(raw.blinkR - Math.max(0, raw.blinkL - raw.blinkR) * 0.7, 0, 1);
-    // Snap: below 0.45 fully open, above 0.7 fully closed. Squint is ignored: talking
-    // and smiling narrow the eyes and would read as half-blinks.
-    const closeL = smoothstep(0.45, 0.7, bL);
-    const closeR = smoothstep(0.45, 0.7, bR);
+    const [closeL, closeR] = eyeStates(raw, now);
     // MediaPipe "Left" = the user's left eye. Mirrored, that is screen-left = image eyeL.
     target.eyeL = 1 - (state.mirror ? closeL : closeR);
     target.eyeR = 1 - (state.mirror ? closeR : closeL);
@@ -554,8 +582,9 @@ function frame(now) {
   cur.roll = lerp(cur.roll, target.roll + moodRoll, aHead);
   cur.posX = lerp(cur.posX, target.posX, aHead);
   cur.posY = lerp(cur.posY, target.posY, aHead);
-  cur.eyeL = lerp(cur.eyeL, clamp(target.eyeL, 0, 1), aFast);
-  cur.eyeR = lerp(cur.eyeR, clamp(target.eyeR, 0, 1), aFast);
+  // eyes are binary (blink state machine); one-frame fade only
+  cur.eyeL = raw ? lerp(cur.eyeL, target.eyeL, 0.8) : lerp(cur.eyeL, target.eyeL, 0.1);
+  cur.eyeR = raw ? lerp(cur.eyeR, target.eyeR, 0.8) : lerp(cur.eyeR, target.eyeR, 0.1);
   cur.gazeX = lerp(cur.gazeX, target.gazeX, aFast);
   cur.gazeY = lerp(cur.gazeY, target.gazeY, aFast);
     // mouth opens almost instantly, closes a touch slower so syllables do not stutter
@@ -594,6 +623,10 @@ function frame(now) {
 }
 window.vt = { char, state, cur };
 requestAnimationFrame(frame);
+// Watchdog: when the page is throttled and requestAnimationFrame stalls (embedded
+// preview, split screen), keep the loop alive at ~30 fps so tracking and the timer
+// do not freeze.
+setInterval(() => { if (fpsLast && performance.now() - fpsLast > 200) frame(performance.now(), true); }, 33);
 
 setStatus('Lade Bilder …');
 char.load((n, total) => setStatus(`Lade Bilder ${n}/${total}`)).then(() => {
