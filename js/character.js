@@ -18,6 +18,7 @@ const IMG_W = 768, IMG_H = 1376;   // base coordinate space (the original head a
 const PAD = 170;                   // extra base px on each side so the arms fit
 const BODY_H = 1620;               // base px: crop just above the navel
 const OUT_W = 1080;                // output canvas width; height follows the screen aspect
+export const CHROMA = '#00B140';   // key colour, same as the CSS background
 const K = OUT_W / (IMG_W + 2 * PAD); // base px -> output px
 const MAX_SCALE = 1.25;            // internal oversampling
 const MAX_CANVAS_H = 2048;         // keep the backing store within one GPU texture tile
@@ -282,7 +283,10 @@ export class Character {
     const breathe = 1 + 0.004 * Math.sin(p.time * 0.0022);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // chroma green painted into the canvas: the recording captures the canvas only,
+    // a CSS background would come out black
+    ctx.fillStyle = CHROMA;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     // base coordinates -> output: scaled by K, padded sideways, anchored at the bottom
     ctx.setTransform(K * this.S, 0, 0, K * this.S, PAD * K * this.S, (this.outH - BODY_H * K) * this.S);
 

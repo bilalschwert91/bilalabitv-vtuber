@@ -5,13 +5,15 @@ import { VoiceLevel } from './voice.js';
 
 const $ = (s) => document.querySelector(s);
 const STORE_KEY = 'bilalabitv-settings';
+const VERSION = '21.09-b';   // bump with every deploy; shown in the menu so a stale cache is obvious
+$('#ver').textContent = 'v' + VERSION;
 
 const state = {
   kit: 'home',
   glasses: false,
   mirror: true,
   demo: false,
-  manualMood: null,   // null = auto
+  manualMood: 'neutral',   // null = auto; default fixed neutral, auto is opt-in
   autoMood: 'neutral',
   recording: false,
   cal: null,
@@ -130,7 +132,7 @@ $('#cal-cancel').addEventListener('click', () => {
 function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
-      kit: state.kit, glasses: state.glasses, mirror: state.mirror, cal: state.cal,
+      kit: state.kit, glasses: state.glasses, mirror: state.mirror, cal: state.cal, mood: state.manualMood,
       prText: state.prText, prSpeed: state.prSpeed, prSize: state.prSize,
       prTop: state.prTop, prHeight: state.prHeight, prWidth: state.prWidth,
     }));
@@ -140,6 +142,7 @@ function load() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
     if (s.kit) state.kit = s.kit;
+    if ('mood' in s) state.manualMood = s.mood;
     if (typeof s.glasses === 'boolean') state.glasses = s.glasses;
     if (typeof s.mirror === 'boolean') state.mirror = s.mirror;
     if (s.cal) { state.cal = s.cal; tracker.setCalibration(s.cal); }
@@ -174,7 +177,7 @@ $('#seg-kit').addEventListener('click', (e) => {
 $('#seg-mood').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   state.manualMood = b.dataset.mood === 'auto' ? null : b.dataset.mood;
-  syncUI();
+  save(); syncUI();
 });
 $('#tg-glasses').addEventListener('change', (e) => { state.glasses = e.target.checked; save(); syncUI(); });
 $('#tg-mirror').addEventListener('change', (e) => { state.mirror = e.target.checked; save(); });
@@ -341,7 +344,7 @@ $('#zones').addEventListener('pointerdown', (e) => {
   const z = e.target.closest('.zone'); if (!z) return;
   const m = z.dataset.mood;
   state.manualMood = state.manualMood === m ? null : m;
-  syncZones();
+  save(); syncZones();
 });
 function syncZones() {
   document.querySelectorAll('#zones .zone').forEach((z) => z.classList.toggle('active', z.dataset.mood === state.manualMood));
@@ -351,7 +354,7 @@ function syncZones() {
 // ---------- in-app video recording (canvas + mic) ----------
 const recorder = new Recorder(char.canvas);
 const recBtn = $('#rec-toggle'), recTime = $('#rec-time');
-const recPause = $('#rec-pause'), recRestart = $('#rec-restart'), recHint = $('#rec-hint');
+const recPause = $('#rec-pause'), recRestart = $('#rec-restart'), recHint = $('#rec-hint'), recLevel = $('#rec-level');
 recorder.onState = (st) => {
   const on = st === 'recording', paused = st === 'paused', running = on || paused;
   recBtn.classList.toggle('on', running);
@@ -549,6 +552,7 @@ function frame(now, manual) {
   fpsLast = now;
   cur.time = now;
   voiceLevel = state.recording ? voice.update() : 0;
+  if (state.recording) recLevel.style.height = Math.round(voiceLevel * 100) + '%';
 
   let raw = null;
   if (state.demo) raw = demoRaw(now);
@@ -601,8 +605,8 @@ function frame(now, manual) {
   cur.posX = lerp(cur.posX, target.posX, aHead);
   cur.posY = lerp(cur.posY, target.posY, aHead);
   // eyes are binary (blink state machine); one-frame fade only
-  cur.eyeL = raw ? lerp(cur.eyeL, target.eyeL, 0.8) : lerp(cur.eyeL, target.eyeL, 0.1);
-  cur.eyeR = raw ? lerp(cur.eyeR, target.eyeR, 0.8) : lerp(cur.eyeR, target.eyeR, 0.1);
+  if (raw) { cur.eyeL = target.eyeL; cur.eyeR = target.eyeR; }
+  else { cur.eyeL = lerp(cur.eyeL, target.eyeL, 0.1); cur.eyeR = lerp(cur.eyeR, target.eyeR, 0.1); }
   cur.gazeX = lerp(cur.gazeX, target.gazeX, aFast);
   cur.gazeY = lerp(cur.gazeY, target.gazeY, aFast);
     // mouth opens almost instantly, closes a touch slower so syllables do not stutter
