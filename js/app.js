@@ -5,7 +5,7 @@ import { VoiceLevel } from './voice.js';
 
 const $ = (s) => document.querySelector(s);
 const STORE_KEY = 'bilalabitv-settings';
-const VERSION = '21.09-d';   // bump with every deploy; shown in the menu so a stale cache is obvious
+const VERSION = '21.09-e';   // bump with every deploy; shown in the menu so a stale cache is obvious
 $('#ver').textContent = 'v' + VERSION;
 
 const state = {
@@ -548,6 +548,7 @@ let voiceLevel = 0;
 const dbgLog = [];
 function frame(now, manual) {
   if (!manual) requestAnimationFrame(frame);
+  if (window.__vt && window.__vt.freeze) return;   // debug: hold the current frame
   if (fpsLast) fps = lerp(fps, 1000 / Math.max(1, now - fpsLast), 0.1);
   fpsLast = now;
   cur.time = now;
@@ -660,4 +661,4 @@ char.load((n, total) => setStatus(`Lade Bilder ${n}/${total}`)).then(() => {
 }).catch((err) => setStatus(err.message, 'err'));
 
 // debug handle (console): window.__vt.state, .tracker, .showCalibration()
-window.__vt = { state, tracker, showCalibration };
+window.__vt = { state, tracker, showCalibration, char, cur };

@@ -297,8 +297,10 @@ export class Character {
       // pivot at the collar line so the neck and the collar never slide against each other
       ctx.translate(G.pivot.x, G.pivot.y);
       ctx.scale(1, breathe);
-      ctx.rotate(roll * 0.5 * Math.PI / 180);
-      ctx.translate(-G.pivot.x + dx, -G.pivot.y + dy * 0.4);
+      // the torso follows the head only a little: a shirt that swings with every
+      // head tilt makes crest and sponsor look like separate objects
+      ctx.rotate(roll * 0.3 * Math.PI / 180);
+      ctx.translate(-G.pivot.x + dx * 0.7, -G.pivot.y + dy * 0.3);
     };
 
     // 0. chest skin inside the collar opening, so head motion shows skin there, not green
@@ -386,8 +388,8 @@ export class Character {
     // copying one pixel row from just above the box down over it
     const body = this.body[kit];
     if (body) {
-      const left = Math.round(x - w * 0.8), right = Math.round(x + w * 0.8);
-      const top = Math.round(y - h * 0.8), bottom = Math.round(y + h * 0.8);
+      const left = Math.round(x - w * 0.62), right = Math.round(x + w * 0.62);
+      const top = Math.round(y - h * 0.66), bottom = Math.round(y + h * 0.66);
       const row = body.getContext('2d').getImageData(left + PAD, top - 6, right - left, 1).data;
       if (kit === 'third') {
         // patterned fabric: a soft disc in the mean colour instead of copied columns
@@ -413,10 +415,8 @@ export class Character {
     const s = Math.min((w * 0.9) / im.width, (h * 0.9) / im.height);
     const dw = im.width * s, dh = im.height * s;
     ctx.save();
-    // soft contact shadow so it reads as printed on fabric, not pasted on
-    ctx.shadowColor = 'rgba(0,0,0,.35)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 1.5;
+    // no shadow: a drop shadow reads as a floating object, a print has none
+    ctx.globalAlpha = 0.96;
     if (kit === 'third') ctx.filter = 'grayscale(1) brightness(1.15)';
     ctx.drawImage(im, x - dw / 2, y - dh / 2, dw, dh);
     ctx.restore();
