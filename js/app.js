@@ -1,6 +1,7 @@
 import { Character, MOODS, defaultParams } from './character.js';
 import { Tracker, exprFromBs } from './tracker.js';
 import { Recorder, saveFile } from './recorder.js';
+import { VoiceLevel } from './voice.js';
 
 const $ = (s) => document.querySelector(s);
 const STORE_KEY = 'bilalabitv-settings';
@@ -95,7 +96,7 @@ async function runCalibration() {
   if (!r) { hideCalibration(); setStatus('Kalibrierung abgebrochen', 'warn'); return; }
   const moods = {};
   for (const k of ['happy', 'angry', 'sad', 'question']) if (run.results[k]) moods[k] = run.results[k].bs;
-  state.cal = { yawOff: r.yawRaw, pitchRatio: r.pitchRatio, rest: r.bs, moods, lipRest: r.lipGap || 0 };
+  state.cal = { yawOff: r.yawRaw, pitchRatio: r.pitchRatio, rest: r.bs, moods, lipRest: Math.min(r.lipGap || 0, 0.006) };   // closed lips: never a large rest gap
   tracker.setCalibration(state.cal);
   applyMoodCalibration();
   save();
@@ -288,8 +289,18 @@ async function requestWakeLock() {
 }
 function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
 
+async function ensureMic() {
+  try {
+    if (!recorder.mic || !recorder.mic.active) {
+      recorder.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+    }
+    await voice.attach(recorder.mic);
+  } catch (e) { console.warn('mic', e); }
+}
 function enterRecording() {
   state.recording = true;
+  voice.init();   // inside the tap, iOS only unlocks audio here
+  ensureMic();   // mic drives the mouth too, so ask for it right away
   $("#stage").classList.remove("setup");
   char.setFit("slice");
   $('#panel').classList.add('hidden');
@@ -528,13 +539,16 @@ function demoRaw(t) {
   };
 }
 
-let dbgLast = 0, fps = 0, fpsLast = 0;
+let dbgLast = 0, fps = 0, fpsLast = 0, mouthOpenedAt = 0;
+const voice = new VoiceLevel();
+let voiceLevel = 0;
 const dbgLog = [];
 function frame(now, manual) {
   if (!manual) requestAnimationFrame(frame);
   if (fpsLast) fps = lerp(fps, 1000 / Math.max(1, now - fpsLast), 0.1);
   fpsLast = now;
   cur.time = now;
+  voiceLevel = state.recording ? voice.update() : 0;
 
   let raw = null;
   if (state.demo) raw = demoRaw(now);
@@ -558,9 +572,13 @@ function frame(now, manual) {
     target.gazeY = raw.lookDown - raw.lookUp;
     target.browL = -(raw.browInnerUp * 0.6 + raw.browOuterUpL) * 22 + raw.browDownL * 14;
     target.browR = -(raw.browInnerUp * 0.6 + raw.browOuterUpR) * 22 + raw.browDownR * 14;
-    // Lip sync: lip gap (fast, catches lips parting) or jaw, whichever is larger.
-    // ~0.01 of face height above rest already counts as talking, 0.08 is fully open.
-    target.mouthOpen = Math.max(clamp((raw.lipOpen - 0.01) / 0.07, 0, 1), clamp(raw.jawOpen * 1.8, 0, 1));
+    // Lip sync: lip gap (fast, catches lips parting), jaw, or the voice level from
+    // the microphone, whichever is larger. 0.008 of face height above rest already
+    // counts as talking, 0.05 is fully open.
+    target.mouthOpen = Math.max(
+      clamp((raw.lipOpen - 0.008) / 0.045, 0, 1),
+      clamp(raw.jawOpen * 1.8, 0, 1),
+      voiceLevel * 1.2);
     target.smile = clamp(raw.smile * 0.9 - raw.frown * 0.8, -1, 1);
     target.mouthWidth = 1 + raw.smile * 0.25 - raw.pucker * 0.35;
     if (!state.manualMood && !state.demo) detectMood(raw, now);
@@ -588,7 +606,11 @@ function frame(now, manual) {
   cur.gazeX = lerp(cur.gazeX, target.gazeX, aFast);
   cur.gazeY = lerp(cur.gazeY, target.gazeY, aFast);
     // mouth opens almost instantly, closes a touch slower so syllables do not stutter
-    cur.mouthOpen = raw ? (target.mouthOpen > cur.mouthOpen ? target.mouthOpen : lerp(cur.mouthOpen, target.mouthOpen, 0.6)) : lerp(cur.mouthOpen, target.mouthOpen, 0.1);
+    if (raw) {
+      if (target.mouthOpen > cur.mouthOpen) { cur.mouthOpen = target.mouthOpen; if (target.mouthOpen > 0.3) mouthOpenedAt = now; }
+      // a syllable keeps the mouth open for at least 90 ms, then it closes quickly
+      else if (now - mouthOpenedAt > 90) cur.mouthOpen = lerp(cur.mouthOpen, target.mouthOpen, 0.6);
+    } else cur.mouthOpen = lerp(cur.mouthOpen, target.mouthOpen, 0.1);
   cur.smile = lerp(cur.smile, clamp(target.smile, -1, 1), 0.35);
   cur.mouthWidth = lerp(cur.mouthWidth, target.mouthWidth, 0.35);
   
@@ -609,7 +631,7 @@ function frame(now, manual) {
     }
     const f = (v) => (v === undefined ? '-' : v.toFixed(2));
     $('#debug').textContent = raw
-      ? 'lip ' + f(raw.lipOpen) + '  jaw ' + f(raw.jawOpen) + '  mund ' + f(cur.mouthOpen) +
+      ? 'lip ' + f(raw.lipOpen) + '  jaw ' + f(raw.jawOpen) + '  stimme ' + f(voiceLevel) + '  mund ' + f(cur.mouthOpen) +
         '\nblinkL ' + f(raw.blinkL) + '  blinkR ' + f(raw.blinkR) + '  augeL ' + f(cur.eyeL) + '  augeR ' + f(cur.eyeR) +
         '\nyaw ' + f(raw.yaw) + '  pitch ' + f(raw.pitch) + '  roll ' + f(raw.roll) +
         '\nfps ' + fps.toFixed(0) + '  mood ' + state.autoMood

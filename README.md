@@ -6,7 +6,7 @@ Der Charakter besteht aus neun Bildern in `img/` (mit Gemini erzeugt): neutral, 
 
 ## Funktionen
 
-- Mund auf/zu, Blinzeln, Kopf neigen/drehen/nicken, Idle-Atmen
+- Mund auf/zu aus Lippenabstand plus Stimmpegel vom Mikrofon, Blinzeln, Zwinkern, Kopf neigen/drehen/nicken, Idle-Atmen
 - Fünf Stimmungen: Neutral, Glücklich, Enttäuscht, Sauer, Fraglich
 - Drei Trikots (Saison 2026/27): Heim, Auswärts, Third
 - Sonnenbrille ein/aus
@@ -54,6 +54,7 @@ Die Kamera funktioniert nur über HTTPS oder `localhost`.
 - `js/tracker.js` – MediaPipe-Tracking und Kalibrierung
 - `js/app.js` – Steuerung, Glättung, Aufnahme-Modus
 - `js/recorder.js` – MediaRecorder: Canvas + Mikrofon zu MP4, Speichern über Teilen-Menü
+- `js/voice.js` – Stimmpegel vom Mikrofon mit adaptivem Rauschboden, zweites Lippen-Signal
 
 ## Veröffentlichung (GitHub Pages)
 
