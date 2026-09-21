@@ -382,9 +382,41 @@ export class Character {
   drawLogoImage(ctx, kit) {
     const { x, y, w, h } = G.crest[kit] || G.crest.home;
     const im = this.logo;
-    const s = Math.min((w * 1.5) / im.width, (h * 1.5) / im.height);
+    // Cover the crest printed into the artwork: continue the vertical stripes by
+    // copying one pixel row from just above the box down over it
+    const body = this.body[kit];
+    if (body) {
+      const left = Math.round(x - w * 0.8), right = Math.round(x + w * 0.8);
+      const top = Math.round(y - h * 0.8), bottom = Math.round(y + h * 0.8);
+      const row = body.getContext('2d').getImageData(left + PAD, top - 6, right - left, 1).data;
+      if (kit === 'third') {
+        // patterned fabric: a soft disc in the mean colour instead of copied columns
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < right - left; i++) { if (row[i * 4 + 3] < 200) continue; r += row[i * 4]; g += row[i * 4 + 1]; b += row[i * 4 + 2]; n++; }
+        if (n) {
+          const col = Math.round(r / n) + ',' + Math.round(g / n) + ',' + Math.round(b / n);
+          const grad = ctx.createRadialGradient(x, y, w * 0.35, x, y, w * 0.75);
+          grad.addColorStop(0, 'rgb(' + col + ')');
+          grad.addColorStop(1, 'rgba(' + col + ',0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(x - w, y - w, 2 * w, 2 * w);
+        }
+      } else {
+        for (let i = 0; i < right - left; i++) {
+          if (row[i * 4 + 3] < 200) continue;
+          ctx.fillStyle = 'rgb(' + row[i * 4] + ',' + row[i * 4 + 1] + ',' + row[i * 4 + 2] + ')';
+          ctx.fillRect(left + i, top, 1, bottom - top);
+        }
+      }
+    }
+    // real crest size: fits inside the crest box (about 12 % of the shirt width)
+    const s = Math.min((w * 0.9) / im.width, (h * 0.9) / im.height);
     const dw = im.width * s, dh = im.height * s;
     ctx.save();
+    // soft contact shadow so it reads as printed on fabric, not pasted on
+    ctx.shadowColor = 'rgba(0,0,0,.35)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1.5;
     if (kit === 'third') ctx.filter = 'grayscale(1) brightness(1.15)';
     ctx.drawImage(im, x - dw / 2, y - dh / 2, dw, dh);
     ctx.restore();

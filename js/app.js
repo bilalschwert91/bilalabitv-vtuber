@@ -5,7 +5,7 @@ import { VoiceLevel } from './voice.js';
 
 const $ = (s) => document.querySelector(s);
 const STORE_KEY = 'bilalabitv-settings';
-const VERSION = '21.09-c';   // bump with every deploy; shown in the menu so a stale cache is obvious
+const VERSION = '21.09-d';   // bump with every deploy; shown in the menu so a stale cache is obvious
 $('#ver').textContent = 'v' + VERSION;
 
 const state = {
