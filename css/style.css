@@ -42,25 +42,37 @@ html, body {
    recording captures the canvas, never the DOM, so labels are safe to show. */
 #zones {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 30px;
+  left: 8px;
+  right: 8px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
   height: 14vh;
   display: flex;
+  gap: 6px;
   z-index: 5;
 }
 #zones[hidden] { display: none; }
+/* tap zone is the full height; the visible pill sits at the bottom */
 .zone {
   flex: 1;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 6px;
-  font-size: 11px;
-  color: rgba(255,255,255,.55);
-  border-top: 1px solid rgba(255,255,255,.18);
 }
-.zone.active { color: #fff; font-weight: 600; border-top-color: #fff; }
+.zone::after {
+  content: attr(data-label);
+  display: block;
+  width: 100%;
+  padding: 10px 2px;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0,0,0,.55);
+  border: 2px solid rgba(255,255,255,.25);
+  text-shadow: 0 1px 2px rgba(0,0,0,.6);
+}
+.zone.active::after { background: var(--yellow); color: #000; border-color: #fff; text-shadow: none; }
 
 /* Record button + timer, right edge */
 #rec-ui {
@@ -367,7 +379,7 @@ button.rec { background: #B3261E; border-color: #e04a41; }
   border-radius: 50% / 45%;
   pointer-events: none;
 }
-.zone.auto { color: rgba(124,242,163,.9); border-top-color: rgba(124,242,163,.7); }
+.zone.auto::after { border-color: #7CF2A3; color: #7CF2A3; }
 
 /* Calibration steps */
 .cal-head { display: flex; justify-content: space-between; align-items: baseline; }
